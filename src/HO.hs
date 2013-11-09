@@ -36,7 +36,10 @@ user.
 import qualified Control.Exception      as E
 import           Control.Monad.Identity
 import           Control.Monad.Morph
+import qualified Data.ByteString.Lazy   as SL
 import qualified Network.HTTP.Conduit   as Client
+import qualified Network.HTTP.Types.URI as HTTP
+
 import           Signing
 import           Types
 
@@ -53,12 +56,15 @@ freeRequest req = req {
        Client.RequestBodySourceChunked (hoist (return . runIdentity) c)
   }
 
-getTempCreds :: Credentials Client -> Server -> IO ()
+getTempCreds :: Credentials Client -> Server -> IO (Maybe (Credentials Temporary))
 getTempCreds cred srv = do
   req <- freeze cred srv (temporaryCredentialRequest srv)
   print req
-  resp <- E.catch (fmap Right $ Client.withManager $ Client.httpLbs $ freeRequest req)
-          $ \(Client.StatusCodeException s rh _) ->
-    do print s >> return (Left rh)
-
-  print resp
+  tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
+  case tryResp of
+    Left e     -> print (e :: E.SomeException) >> return Nothing
+    Right resp -> return $ do
+      let qs = HTTP.parseQuery $ SL.toStrict $ Client.responseBody resp
+      oaTok <- join (lookup "oauth_token"        qs)
+      oaSec <- join (lookup "oauth_token_secret" qs)
+      return (createTemporaryCredentials oaTok oaSec cred)

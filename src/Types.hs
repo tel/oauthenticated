@@ -94,6 +94,12 @@ credType ClientCredentials{}    = Client
 credType TemporaryCredentials{} = Temporary
 credType TokenCredentials{}     = Token
 
+createTemporaryCredentials
+  :: S.ByteString -> S.ByteString
+     -> Credentials Client -> Credentials Temporary
+createTemporaryCredentials tok tokSec (ClientCredentials k s _) =
+  TemporaryCredentials k s tok tokSec
+
 instance Show (Credentials Client) where
   show c = "Credentials [Client] { credClientKey = "
            ++ show (credClientKey c)
@@ -270,8 +276,7 @@ deriving instance Show (Oa Temporary)
 deriving instance Show (Oa Token)
 
 -- | Creates a pure, unsigned 'Oa'. This does not include the
--- 'oaVerifier' or 'oaToken' either so those must be added manually if
--- required.
+-- 'oaVerifier' so those must be added manually if used.
 oa :: Credentials ty -> Server -> UTCTime -> S.ByteString -> Oa ty
 oa cred srv time nonce =
   Oa { oaVersion         = serverVersion srv
