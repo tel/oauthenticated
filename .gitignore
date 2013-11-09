@@ -1,0 +1,5 @@
+dist
+.dir-locals.el
+vendor
+cabal.sandbox.config
+src/Test.hs
