@@ -10,26 +10,25 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE StandaloneDeriving    #-}
 
-module Types where
+module Network.HTTP.Conduit.OAuth.Types where
 
 import           Control.Applicative
+import           Control.Arrow
 import           Control.Failure
 import           Control.Monad
 import           Control.Monad.Identity
-import qualified Data.ByteString               as S
-import qualified Data.ByteString.Base16        as S16
-import qualified Data.ByteString.Char8         as S8
-import qualified Data.CaseInsensitive          as CI
+import qualified Data.ByteString                            as S
+import qualified Data.ByteString.Base16                     as S16
+import qualified Data.ByteString.Char8                      as S8
+import qualified Data.CaseInsensitive                       as CI
+import           Data.Maybe
 import           Data.Monoid
 import           Data.Time
-import qualified Network.HTTP.Conduit          as Client
-import qualified Network.HTTP.Conduit.Internal as Client
-import qualified Network.HTTP.Types            as HTTP
+import qualified Network.HTTP.Conduit                       as Client
+import qualified Network.HTTP.Conduit.Internal              as Client
+import           Network.HTTP.Conduit.OAuth.Internal.ToHTTP
+import qualified Network.HTTP.Types                         as HTTP
 import           System.Random
-
-import           Class
-import           Control.Arrow
-import           Data.Maybe
 
 -- Credentials
 --------------------------------------------------------------------------------
@@ -99,6 +98,12 @@ createTemporaryCredentials
      -> Credentials Client -> Credentials Temporary
 createTemporaryCredentials tok tokSec (ClientCredentials k s _) =
   TemporaryCredentials k s tok tokSec
+
+createTokenCredentials
+  :: S.ByteString -> S.ByteString
+     -> Credentials Temporary -> Credentials Token
+createTokenCredentials tok tokSec (TemporaryCredentials k s _ _) =
+  TokenCredentials k s tok tokSec
 
 instance Show (Credentials Client) where
   show c = "Credentials [Client] { credClientKey = "

@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module HO where
+module Network.HTTP.Conduit.OAuth where
 
 {- OAuth
 --------------------------------------------------------------------------------
@@ -33,15 +33,17 @@ user.
 
 -}
 
-import qualified Control.Exception      as E
+import qualified Control.Exception                           as E
 import           Control.Monad.Identity
 import           Control.Monad.Morph
-import qualified Data.ByteString.Lazy   as SL
-import qualified Network.HTTP.Conduit   as Client
-import qualified Network.HTTP.Types.URI as HTTP
+import qualified Data.ByteString                             as S
+import qualified Data.ByteString.Lazy                        as SL
+import           Data.Monoid
+import qualified Network.HTTP.Conduit                        as Client
+import qualified Network.HTTP.Types.URI                      as HTTP
 
-import           Signing
-import           Types
+import           Network.HTTP.Conduit.OAuth.Internal.Signing
+import           Network.HTTP.Conduit.OAuth.Types
 
 -- | Lift an 'Identity'-monad 'Client.Request' into any other monad.
 freeRequest :: Monad m => Client.Request Identity -> Client.Request m
@@ -56,15 +58,44 @@ freeRequest req = req {
        Client.RequestBodySourceChunked (hoist (return . runIdentity) c)
   }
 
-getTempCreds :: Credentials Client -> Server -> IO (Maybe (Credentials Temporary))
+note :: String -> Maybe a -> Either String a
+note s Nothing  = Left s
+note _ (Just a) = Right a
+
+getTempCreds :: Credentials Client -> Server -> IO (Either String (Credentials Temporary))
 getTempCreds cred srv = do
   req <- freeze cred srv (temporaryCredentialRequest srv)
-  print req
   tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
-  case tryResp of
-    Left e     -> print (e :: E.SomeException) >> return Nothing
-    Right resp -> return $ do
+  return $ case tryResp of
+    Left e     -> Left $ show (e :: E.SomeException)
+    Right resp -> do
       let qs = HTTP.parseQuery $ SL.toStrict $ Client.responseBody resp
-      oaTok <- join (lookup "oauth_token"        qs)
-      oaSec <- join (lookup "oauth_token_secret" qs)
+      oaTok <- note "Bad credential response: missing oauth_token"
+               $ join (lookup "oauth_token"        qs)
+      oaSec <- note "Bad credential response: missing oauth_token_secret"
+               $ join (lookup "oauth_token_secret" qs)
       return (createTemporaryCredentials oaTok oaSec cred)
+
+getTok :: Credentials Temporary -> Server -> S.ByteString
+          -> IO (Either String (Credentials Token))
+getTok cred srv verifier = do
+  let req0 = tokenRequest srv
+  oax0 <- freshOa cred srv
+  let oax = oax0 { oaVerifier = Just verifier }
+  let req = sign cred srv oax req0
+  tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
+  return $ case tryResp of
+    Left e     -> Left $ show (e :: E.SomeException)
+    Right resp -> do
+      let qs = HTTP.parseQuery $ SL.toStrict $ Client.responseBody resp
+      oaTok <- note "Bad credential response: missing oauth_token"
+               $ join (lookup "oauth_token"        qs)
+      oaSec <- note "Bad credential response: missing oauth_token_secret"
+               $ join (lookup "oauth_token_secret" qs)
+      return (createTokenCredentials oaTok oaSec cred)
+
+buildAuthorizationRequest :: Credentials Temporary -> Server -> Client.Request Identity
+buildAuthorizationRequest creds srv =
+  (resourceOwnerAuthorize srv) {
+    Client.queryString = "?oauth_token=" <> credToken creds
+  }

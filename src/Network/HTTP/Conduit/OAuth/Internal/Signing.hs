@@ -1,29 +1,28 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- | Finalizing 'Client.Request's using 'Oa' parameters
-module Signing where
+module Network.HTTP.Conduit.OAuth.Internal.Signing where
 
-import qualified Blaze.ByteString.Builder  as Blaze
+import qualified Blaze.ByteString.Builder         as Blaze
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad.Identity
-import           Crypto.Hash.SHA1          (hash)
-import           Crypto.MAC.HMAC           (hmac)
-import qualified Data.ByteString           as S
-import qualified Data.ByteString.Base64    as S64
-import qualified Data.ByteString.Char8     as S8
-import qualified Data.ByteString.Lazy      as SL
-import           Data.Char                 (toUpper)
+import           Crypto.Hash.SHA1                 (hash)
+import           Crypto.MAC.HMAC                  (hmac)
+import qualified Data.ByteString                  as S
+import qualified Data.ByteString.Base64           as S64
+import qualified Data.ByteString.Char8            as S8
+import qualified Data.ByteString.Lazy             as SL
+import           Data.Char                        (toUpper)
 import           Data.Conduit
-import qualified Data.Conduit.List         as Conduit
-import           Data.List                 (sort)
-import           Data.Monoid
-import qualified Network.HTTP.Conduit      as Client
-import qualified Network.HTTP.Types.Header as HTTP
-import qualified Network.HTTP.Types.URI    as HTTP
-
+import qualified Data.Conduit.List                as Conduit
+import           Data.List                        (sort)
 import           Data.Maybe
-import           Types
+import           Data.Monoid
+import qualified Network.HTTP.Conduit             as Client
+import           Network.HTTP.Conduit.OAuth.Types
+import qualified Network.HTTP.Types.Header        as HTTP
+import qualified Network.HTTP.Types.URI           as HTTP
 
 sign :: Credentials ty -> Server -> Oa ty -> Client.Request Identity -> Client.Request Identity
 sign creds srv oax req0 =

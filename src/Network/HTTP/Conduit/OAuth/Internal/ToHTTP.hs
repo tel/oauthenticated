@@ -1,5 +1,5 @@
 
-module Class where
+module Network.HTTP.Conduit.OAuth.Internal.ToHTTP where
 
 import qualified Data.Attoparsec.Char8 as At
 import qualified Data.ByteString       as S
