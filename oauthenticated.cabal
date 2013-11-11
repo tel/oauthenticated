@@ -33,17 +33,26 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     Network.HTTP.Conduit.OAuth
-    Network.HTTP.Conduit.OAuth.Types
     Network.HTTP.Conduit.OAuth.Internal.Signing
     Network.HTTP.Conduit.OAuth.Internal.ToHTTP
+    Network.HTTP.Conduit.OAuth.Types
+    Network.HTTP.Conduit.OAuth.Types.Basic
+    Network.HTTP.Conduit.OAuth.Types.Callback
+    Network.HTTP.Conduit.OAuth.Types.Credentials
+    Network.HTTP.Conduit.OAuth.Types.Params
+    Network.HTTP.Conduit.OAuth.Types.Server
+  other-modules:
+    Network.HTTP.Conduit.OAuth.Util
   build-depends:       base >=4.6 && <4.7
                      , base16-bytestring
                      , base64-bytestring
                      , blaze-builder
                      , conduit
                      , mmorph
+                     , contravariant
                      , attoparsec
                      , bytestring
+                     , profunctors
                      , case-insensitive
                      , containers
                      , cryptohash

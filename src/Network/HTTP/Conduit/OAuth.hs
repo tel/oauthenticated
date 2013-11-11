@@ -1,10 +1,10 @@
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Network.HTTP.Conduit.OAuth where
+{- |
 
-{- OAuth
---------------------------------------------------------------------------------
+/OAuth/
+
 OAuth is a format for managing access tokens which mediate
 authenticated and authorized data transfer between three parties:
 
@@ -21,8 +21,8 @@ request to the user who, approving it, generates token credentials for
 the client. These token credentials allow the client to freely access
 the user's resource at a later date.
 
-Credential Generation
---------------------------------------------------------------------------------
+/Credential Generation/
+
 Client Credentials are provided by the server. For the purposes of
 this library, they are provided externally.
 
@@ -32,6 +32,23 @@ to the particular kind of access the client is requesting from the
 user.
 
 -}
+
+-- |
+-- Module      : Network.HTTP.Conduit.OAuth
+-- Copyright   : (c) Joseph Abrahamson 2013
+-- License     : MIT
+--
+-- Maintainer  : me@jspha.com
+-- Stability   : experimental
+-- Portability : non-portable
+--
+--
+-- This module exposes the simplest API for *accessing* OAuth
+-- resources. Importantly, credential *generation* is outside the
+-- scope of this API and it's assumed you have 'Token' level
+-- credentials.
+
+module Network.HTTP.Conduit.OAuth where
 
 import qualified Control.Exception                           as E
 import           Control.Monad.Identity
