@@ -37,17 +37,14 @@ data ParameterMethod = AuthorizationHeader
 -- is used then the request should be conducted over a secure
 -- transport layer like TLS.
 data SignatureMethod = HmacSha1
-                     -- | Plaintext
                      deriving ( Show, Eq, Ord )
 
 instance ToHTTP SignatureMethod where
-  -- toHTTP Plaintext = "PLAINTEXT"
   toHTTP HmacSha1  = "HMAC-SHA1"
 
 instance FromHTTP SignatureMethod where
   fromHTTP s = case CI.mk s of
     ci | ci == "hmac-sha1" -> Just HmacSha1
-       -- | ci == "plaintext" -> Just Plaintext
        | otherwise         -> Nothing
 
 data Version = OAuth1 deriving ( Show, Eq, Ord )

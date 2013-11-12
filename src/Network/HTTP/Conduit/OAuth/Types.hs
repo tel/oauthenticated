@@ -14,14 +14,25 @@
 --
 
 module Network.HTTP.Conduit.OAuth.Types (
-  module X
+  -- * Basic configuration types
+  Request, ParameterMethod (..), SignatureMethod (..), Version (..),
+  Callback (..), parseCallback,
+
+  -- * Server Configuration
+  Server (..), ThreeLeggedFlow (..),
+  getResourceOwnerAuthorize, getTemporaryCredentialRequest, getTokenRequest, getCallback,
+  parseThreeLeggedFlow,
+
+  -- * Credentials
+  Credentials, Token, Client, Temporary, Permanent,
+  clientCredentials, temporaryCredentials, permanentCredentials, viewClientKey, viewTokenKey,
+
+  -- * OAuth Parameterization
+  Oa, freshOa, oa,
   ) where
 
-import           Network.HTTP.Conduit.OAuth.Types.Basic       as X
-import           Network.HTTP.Conduit.OAuth.Types.Callback    as X (Callback (..), parseCallback)
-import           Network.HTTP.Conduit.OAuth.Types.Credentials as X (Client, Credentials (..),
-                                                                    Temporary,
-                                                                    Token, clientCredentials, temporaryCredentials, tokenCredentials, viewClientKey, viewTokenKey)
-import           Network.HTTP.Conduit.OAuth.Types.Params      as X (Oa, freshOa,
-                                                                    oa)
-import           Network.HTTP.Conduit.OAuth.Types.Server      as X (Server (..), ThreeLeggedFlow (..), getResourceOwnerAuthorize, getTemporaryCredentialRequest, getTokenRequest, parseThreeLeggedFlow)
+import           Network.HTTP.Conduit.OAuth.Types.Basic
+import           Network.HTTP.Conduit.OAuth.Types.Callback
+import           Network.HTTP.Conduit.OAuth.Types.Credentials
+import           Network.HTTP.Conduit.OAuth.Types.Params
+import           Network.HTTP.Conduit.OAuth.Types.Server

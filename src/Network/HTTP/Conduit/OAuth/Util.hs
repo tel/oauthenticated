@@ -1,12 +1,16 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE RankNTypes    #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE DeriveFunctor         #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE TupleSections         #-}
 
 module Network.HTTP.Conduit.OAuth.Util (
-  view, over, set, iso, from, prism, preview, to, _Just, _Nothing
+  view, preview, over, set, to, from,
+  iso, prism,
+  _Just, _Nothing, _1, _2, (&), (<&>)
   ) where
 
 import           Control.Applicative
+import           Control.Monad.Reader
 import           Data.Functor.Constant
 import           Data.Functor.Contravariant
 import           Data.Functor.Identity
@@ -19,8 +23,8 @@ import           Unsafe.Coerce
 -- mu Lens
 --------------------------------------------------------------------------------
 
-view :: ((a -> Constant a a) -> s -> Constant a s) -> s -> a
-view inj = getConstant . inj Constant
+view :: MonadReader s m => ((a -> Constant a a) -> s -> Constant a s) -> m a
+view inj = asks (getConstant . inj Constant)
 {-# INLINE view #-}
 
 over :: Profunctor p => (p a (Identity b) -> p s (Identity t)) -> p a b -> p s t
@@ -101,5 +105,19 @@ _Nothing :: (Applicative f, Choice p) =>
 _Nothing = prism (const Nothing) $ maybe (Right ()) (const $ Left Nothing)
 {-# INLINE _Nothing #-}
 
-_1 :: Functor f => (t -> f a) -> (t, t1) -> f (a, t1)
+infixl 5 <&>
+(<&>) :: Functor f => f a -> (a -> b) -> f b
+(<&>) = flip (<$>)
+{-# INLINE (<&>) #-}
+
+infixl 1 &
+(&) :: b -> (b -> c) -> c
+(&) = flip ($)
+{-# INLINE (&) #-}
+
+
+_1 :: Functor f => (a -> f a') -> (a, b) -> f (a', b)
 _1 inj (a, b) = (,b) <$> inj a
+
+_2 :: Functor f => (b -> f b') -> (a, b) -> f (a, b')
+_2 inj (a, b) = (a,) <$> inj b

@@ -52,6 +52,7 @@ library
                      , mmorph
                      , contravariant
                      , attoparsec
+                     , lifted-base
                      , bytestring
                      , profunctors
                      , case-insensitive
@@ -65,4 +66,5 @@ library
                      , resourcet
                      , time
   hs-source-dirs:      src
+  ghc-options:         -Wall
   default-language:    Haskell2010

@@ -26,7 +26,7 @@
 module Network.HTTP.Conduit.OAuth.Types.Params (
 
   -- * OAuth Parameter Bundle
-  Oa (..), oa, freshOa,
+  Oa (..), oa, freshOa, refreshOa,
 
   -- ** Lensy access
   oaVersion, oaCredentials, oaToken, oaSignatureMethod, oaCallback,
@@ -75,50 +75,50 @@ data Oa ty = Oa { _oaVersion         :: Version
                 }
 
 oaVersion :: Functor f => (Version -> f Version) -> Oa ty -> f (Oa ty)
-oaVersion inj oa =
-  (\x -> oa { _oaVersion = x }) <$> inj (_oaVersion oa)
+oaVersion inj oax =
+  (\x -> oax { _oaVersion = x }) <$> inj (_oaVersion oax)
 
 oaCredentials :: Functor f => (Credentials ty -> f (Credentials ty))
                  -> Oa ty -> f (Oa ty)
-oaCredentials inj oa =
-  (\x -> oa { _oaCredentials = x }) <$> inj (_oaCredentials oa)
+oaCredentials inj oax =
+  (\x -> oax { _oaCredentials = x }) <$> inj (_oaCredentials oax)
 
 oaToken :: Functor f => (S.ByteString -> f S.ByteString) -> Oa ty -> f (Oa ty)
-oaToken inj oa =
-  (\x -> oa { _oaToken = x }) <$> inj (_oaToken oa)
+oaToken inj oax =
+  (\x -> oax { _oaToken = x }) <$> inj (_oaToken oax)
 
 oaSignatureMethod :: Functor f => (SignatureMethod -> f SignatureMethod)
                      -> Oa ty -> f (Oa ty)
-oaSignatureMethod inj oa =
-  (\x -> oa { _oaSignatureMethod = x }) <$> inj (_oaSignatureMethod oa)
+oaSignatureMethod inj oax =
+  (\x -> oax { _oaSignatureMethod = x }) <$> inj (_oaSignatureMethod oax)
 
 oaCallback :: Functor f => (Maybe Callback -> f (Maybe Callback))
               -> Oa ty -> f (Oa ty)
-oaCallback inj oa =
-  (\x -> oa { _oaCallback = x }) <$> inj (_oaCallback oa)
+oaCallback inj oax =
+  (\x -> oax { _oaCallback = x }) <$> inj (_oaCallback oax)
 
 oaVerifier :: Functor f => (Maybe S.ByteString -> f (Maybe S.ByteString))
               -> Oa ty -> f (Oa ty)
-oaVerifier inj oa =
-  (\x -> oa { _oaVerifier = x }) <$> inj (_oaVerifier oa)
+oaVerifier inj oax =
+  (\x -> oax { _oaVerifier = x }) <$> inj (_oaVerifier oax)
 
 oaTimestamp :: Functor f => (UTCTime -> f UTCTime) -> Oa ty -> f (Oa ty)
-oaTimestamp inj oa =
-  (\x -> oa { _oaTimestamp = x }) <$> inj (_oaTimestamp oa)
+oaTimestamp inj oax =
+  (\x -> oax { _oaTimestamp = x }) <$> inj (_oaTimestamp oax)
 
 oaNonce :: Functor f => (S.ByteString -> f S.ByteString)
            -> Oa ty -> f (Oa ty)
-oaNonce inj oa =
-  (\x -> oa { _oaNonce = x }) <$> inj (_oaNonce oa)
+oaNonce inj oax =
+  (\x -> oax { _oaNonce = x }) <$> inj (_oaNonce oax)
 
 oaSignature :: Functor f => (Maybe S.ByteString -> f (Maybe S.ByteString))
                -> Oa ty -> f (Oa ty)
-oaSignature inj oa =
-  (\x -> oa { _oaSignature = x }) <$> inj (_oaSignature oa)
+oaSignature inj oax =
+  (\x -> oax { _oaSignature = x }) <$> inj (_oaSignature oax)
 
 deriving instance Show (Oa Client)
 deriving instance Show (Oa Temporary)
-deriving instance Show (Oa Token)
+deriving instance Show (Oa Permanent)
 
 -- | Creates a pure, unsigned 'Oa'. This does not include the
 -- 'oaVerifier' so those must be added manually if used.
@@ -126,7 +126,7 @@ oa :: Credentials ty -> Server -> Maybe Callback -> UTCTime -> S.ByteString -> O
 oa cred srv cb time nonce =
   Oa { _oaVersion         = view oauthVersion srv
      , _oaCredentials     = cred
-     , _oaToken           = viewTokenKey cred
+     , _oaToken           = viewTokenKey' cred
      , _oaSignatureMethod = view signatureMethod srv
      , _oaCallback        = cb
      , _oaVerifier        = Nothing
@@ -143,6 +143,12 @@ freshOa cred srv cb = oa cred srv cb
                       <*> newNonce
   where newNonce = S16.encode . S.pack <$> replicateM 18 randomIO
 
+refreshOa :: Oa ty -> IO (Oa ty)
+refreshOa oax = fixedOa <$> getCurrentTime <*> newNonce
+  where newNonce = S16.encode . S.pack <$> replicateM 18 randomIO
+        fixedOa ts n = oax & set oaTimestamp ts
+                           & set oaNonce     n
+
 oaDict :: Oa ty -> [(S.ByteString, S.ByteString)]
 oaDict oax =
   catMaybes
@@ -151,7 +157,7 @@ oaDict oax =
   , pair "oauth_signature_method" . toHTTP  .$. view oaSignatureMethod oax
   , pair "oauth_callback" . toHTTP          <$> view oaCallback oax
   , pair "oauth_verifier"                   <$> view oaVerifier oax
-  , pair "oauth_token"                      .$. view (oaCredentials . to viewTokenKey) oax
+  , pair "oauth_token"                      .$. view (oaCredentials . to viewTokenKey') oax
   , pair "oauth_timestamp" . toHTTP         .$. view oaTimestamp oax
   , pair "oauth_nonce"                      .$. view oaNonce oax
   , pair "oauth_signature"                  <$> view oaSignature oax

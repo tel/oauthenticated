@@ -1,6 +1,8 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs             #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 
 -- |
 -- Module      : Network.HTTP.Conduit.OAuth.Types.Credentials
@@ -15,20 +17,21 @@
 module Network.HTTP.Conduit.OAuth.Types.Credentials (
 
   -- * Types of Credentials
-  Credentials (..), Client, Temporary, Token,
+  Credentials (..), Token (..), Client, Temporary, Permanent,
+
+  -- * Component Access
+  clientKey, clientSecret,
 
   -- 'Temporary' and 'Token' credentials specialize 'Client'
   -- credentials and thus instantiate the 'HasToken' class.
-  HasToken,
-
-  -- * Component Access
-  clientKey, clientSecret, tokenKey, tokenSecret, clientComponent,
+  HasToken (..),
 
   -- ** Basic
   viewClientKey, viewClientSecret, viewTokenKey, viewTokenSecret,
+  viewTokenKey', viewTokenSecret',
 
   -- * Building and upgrading credentials
-  clientCredentials, temporaryCredentials, tokenCredentials,
+  clientCredentials, temporaryCredentials, permanentCredentials,
 
   -- * Signing
   signingKey
@@ -37,7 +40,6 @@ module Network.HTTP.Conduit.OAuth.Types.Credentials (
 
 import           Control.Applicative
 import qualified Data.ByteString                 as S
-import qualified Data.ByteString.Char8           as S8
 import           Data.Monoid
 import           Network.HTTP.Conduit.OAuth.Util
 import qualified Network.HTTP.Types              as HTTP
@@ -57,150 +59,150 @@ data Client
 -- authorize a single client a single time.
 data Temporary
 
--- | 'Token' 'Credentials' are credentials which provide a client
+-- | 'Permanent' 'Credentials' are credentials which provide a client
 -- access to a user's protected resource *semi-permanently*.
-data Token
+data Permanent
+
+-- | A 'Token' is the very component which elevates 'Client'
+-- 'Credentials' to 'Temporary' or 'Permanent' 'Credentials'.
+data Token ty =
+  Token { tokKey    :: S.ByteString
+        , tokSecret :: S.ByteString
+        } deriving ( Show, Eq, Ord )
 
 -- | Credentials are created at various points during the OAuth
 -- handshakes. Each time they are a pair of a key and a secret, the
 -- first of which being public the second private.
-
 data Credentials ty where
-  ClientCredentials
-    :: S.ByteString -> S.ByteString -> Credentials Client
-  TemporaryCredentials
-    :: S.ByteString -> S.ByteString    -- linked client credentials
-       -> S.ByteString -> S.ByteString -- temporary credentials
-       -> Credentials Temporary
-  TokenCredentials
-    :: S.ByteString -> S.ByteString    -- linked client credentials
-       -> S.ByteString -> S.ByteString -- temporary credentials
-       -> Credentials Token
+  ClientCredentials :: S.ByteString -> S.ByteString -> Credentials Client
+  TemporaryCredentials :: Credentials Client -> Token Temporary -> Credentials Temporary
+  PermanentCredentials :: Credentials Client -> Token Permanent -> Credentials Permanent
 
--- | 'Credentials' with tokens are 'Temporary' or 'Token'
--- 'Credentials'. 'Client' 'Credentials' always have empty tokens.
-class HasToken c where
+deriving instance Eq (Credentials ty)
+deriving instance Show (Credentials ty)
+
+
+clientKey :: Functor f => (S.ByteString -> f S.ByteString)
+          -> Credentials ty -> f (Credentials ty)
+clientKey inj (ClientCredentials k s) = (`ClientCredentials` s) <$> inj k
+clientKey inj (TemporaryCredentials (ClientCredentials k s) tok) =
+  (\k' -> TemporaryCredentials (ClientCredentials k' s) tok) <$> inj k
+clientKey inj (PermanentCredentials (ClientCredentials k s) tok) =
+  (\k' -> PermanentCredentials (ClientCredentials k' s) tok) <$> inj k
+{-# INLINE clientKey #-}
+
+clientSecret :: Functor f => (S.ByteString -> f S.ByteString)
+          -> Credentials ty -> f (Credentials ty)
+clientSecret inj (ClientCredentials k s) = ClientCredentials k <$> inj s
+clientSecret inj (TemporaryCredentials (ClientCredentials k s) tok) =
+  (\s' -> TemporaryCredentials (ClientCredentials k s') tok) <$> inj s
+clientSecret inj (PermanentCredentials (ClientCredentials k s) tok) =
+  (\s' -> PermanentCredentials (ClientCredentials k s') tok) <$> inj s
+{-# INLINE clientSecret #-}
+
+-- | 'Credentials' with tokens are 'Temporary' or 'Permanent'
+-- 'Credentials'. 'Client' 'Credentials' always have empty tokens, so
+-- we can't access that part with a lens.
+class HasToken ty c where
+  token
+    :: Functor f => (Token ty -> f (Token ty))
+       -> c ty -> f (c ty)
   tokenKey
     :: Functor f => (S.ByteString -> f S.ByteString)
-       -> Credentials c -> f (Credentials c)
+       -> c ty -> f (c ty)
   tokenSecret
     :: Functor f => (S.ByteString -> f S.ByteString)
-       -> Credentials c -> f (Credentials c)
-  clientComponent
-    :: Functor f => (Credentials Client -> f (Credentials Client))
-       -> Credentials c -> f (Credentials c)
+       -> c ty -> f (c ty)
 
-instance HasToken Temporary where
-  tokenKey inj (TemporaryCredentials k s kk ss) =
-    (\kk' -> TemporaryCredentials k s kk' ss) <$> inj kk
+instance HasToken Temporary Token where
+  token = id
+  {-# INLINE token #-}
+  tokenKey inj (Token k s) = (`Token` s) <$> inj k
   {-# INLINE tokenKey #-}
-  tokenSecret inj (TemporaryCredentials k s kk ss) =
-    TemporaryCredentials k s kk <$> inj ss
+  tokenSecret inj (Token k s) = Token k <$> inj s
   {-# INLINE tokenSecret #-}
-  clientComponent inj (TemporaryCredentials k s kk ss) =
-    temporaryCredentials (kk, ss) <$> inj (ClientCredentials k s)
-  {-# INLINE clientComponent #-}
 
-instance HasToken Token where
-  tokenKey inj (TokenCredentials k s kk ss) =
-    (\kk' -> TokenCredentials k s kk' ss) <$> inj kk
+instance HasToken Permanent Token where
+  token = id
+  {-# INLINE token #-}
+  tokenKey inj (Token k s) = (`Token` s) <$> inj k
   {-# INLINE tokenKey #-}
-  tokenSecret inj (TokenCredentials k s kk ss) =
-    TokenCredentials k s kk <$> inj ss
+  tokenSecret inj (Token k s) = Token k <$> inj s
   {-# INLINE tokenSecret #-}
-  clientComponent inj (TokenCredentials k s kk ss) =
-    tokenCredentials (kk, ss) <$> inj (ClientCredentials k s)
-  {-# INLINE clientComponent #-}
 
--- | Lens over the 'Client' key component available in all
--- 'Credentials'.
-clientKey
-  :: Functor f => (S.ByteString -> f S.ByteString)
-     -> Credentials ty -> f (Credentials ty)
-clientKey inj (ClientCredentials k s) =
-  (\k' -> ClientCredentials k' s) <$> inj k
-clientKey inj (TemporaryCredentials k s kk ss) =
-  (\k' -> TemporaryCredentials k' s kk ss) <$> inj k
-clientKey inj (TokenCredentials k s kk ss) =
-  (\k' -> TokenCredentials k' s kk ss) <$> inj k
+instance HasToken Temporary Credentials where
+  token inj (TemporaryCredentials cred tok) =
+    TemporaryCredentials cred <$> inj tok
+  tokenKey = token . tokenKey
+  {-# INLINE tokenKey #-}
+  tokenSecret = token . tokenSecret
+  {-# INLINE tokenSecret #-}
 
-viewClientKey :: Credentials ty -> S8.ByteString
+instance HasToken Permanent Credentials where
+  token inj (PermanentCredentials cred tok) =
+    PermanentCredentials cred <$> inj tok
+  tokenKey = token . tokenKey
+  {-# INLINE tokenKey #-}
+  tokenSecret = token . tokenSecret
+  {-# INLINE tokenSecret #-}
+
+viewClientKey :: Credentials ty -> S.ByteString
 viewClientKey = view clientKey
+{-# INLINE viewClientKey #-}
 
--- | Lens over the 'Client' key-secret component available in all
--- 'Credentials'.
-clientSecret
-  :: Functor f => (S.ByteString -> f S.ByteString)
-     -> Credentials ty -> f (Credentials ty)
-clientSecret inj (ClientCredentials k s) =
-  (\s' -> ClientCredentials k s') <$> inj s
-clientSecret inj (TemporaryCredentials k s kk ss) =
-  (\s' -> TemporaryCredentials k s' kk ss) <$> inj s
-clientSecret inj (TokenCredentials k s kk ss) =
-  (\s' -> TokenCredentials k s' kk ss) <$> inj s
-
-viewClientSecret :: Credentials ty -> S8.ByteString
+viewClientSecret :: Credentials ty -> S.ByteString
 viewClientSecret = view clientSecret
+{-# INLINE viewClientSecret #-}
 
-viewTokenKey :: Credentials ty -> S8.ByteString
-viewTokenKey ClientCredentials{}         = S.empty
-viewTokenKey cred@TemporaryCredentials{} = view tokenKey cred
-viewTokenKey cred@TokenCredentials{}     = view tokenKey cred
+viewTokenKey :: HasToken ty t => t ty -> S.ByteString
+viewTokenKey = view tokenKey
+{-# INLINE viewTokenKey #-}
 
-viewTokenSecret :: Credentials ty -> S8.ByteString
-viewTokenSecret ClientCredentials{}         = S.empty
-viewTokenSecret cred@TemporaryCredentials{} = view tokenSecret cred
-viewTokenSecret cred@TokenCredentials{}     = view tokenSecret cred
+-- | 'viewTokenKey' with defaults for 'Credentials' not instantiating
+-- 'HasToken'.
+viewTokenKey' :: Credentials ty -> S.ByteString
+viewTokenKey' ClientCredentials{} = S.empty
+viewTokenKey' creds@TemporaryCredentials{} = view tokenKey creds
+viewTokenKey' creds@PermanentCredentials{} = view tokenKey creds
+{-# INLINE viewTokenKey' #-}
+
+viewTokenSecret :: HasToken ty t => t ty -> S.ByteString
+viewTokenSecret = view tokenSecret
+{-# INLINE viewTokenSecret #-}
+
+-- | 'viewTokenSecret' with defaults for 'Credentials' not
+-- instantiating 'HasToken'.
+viewTokenSecret' :: Credentials ty -> S.ByteString
+viewTokenSecret' ClientCredentials{}    = S.empty
+viewTokenSecret' creds@TemporaryCredentials{} = view tokenSecret creds
+viewTokenSecret' creds@PermanentCredentials{} = view tokenSecret creds
+{-# INLINE viewTokenSecret' #-}
 
 -- | Creates a signing key based on the kind of credentials currently
--- possessed.
+-- possessed. This function automatically handles imputing blank token
+-- components for 'Client' 'Credentials'.
 signingKey :: Credentials ty -> S.ByteString
-signingKey cred =
-  HTTP.urlEncode True (view clientSecret cred)
+signingKey creds =
+  HTTP.urlEncode True (view clientSecret creds)
   <> "&" <>
-  HTTP.urlEncode True (viewTokenSecret cred)
+  HTTP.urlEncode True (viewTokenSecret' creds)
 
 -- | Build basic 'Client' 'Credentials' from client token and client
 -- token secret componenets.
-clientCredentials
-  :: (S.ByteString, S.ByteString) -> Credentials Client
+clientCredentials :: (S.ByteString, S.ByteString) -> Credentials Client
 clientCredentials = uncurry ClientCredentials
 
 -- | Upgrade 'Client' 'Credentials' to 'Temporary' 'Credential's by
 -- adding in the temporary token and temporary token secret
 -- componenets.
-temporaryCredentials
-  :: (S.ByteString, S.ByteString)
-     -> Credentials Client -> Credentials Temporary
-temporaryCredentials (tok, tokSec) (ClientCredentials k s) =
-  TemporaryCredentials k s tok tokSec
+temporaryCredentials :: Token Temporary -> Credentials Client -> Credentials Temporary
+temporaryCredentials = flip TemporaryCredentials
 {-# INLINE temporaryCredentials #-}
 
 -- | Upgrade any set of 'Credentials' to 'Token' 'Credentials' by
 -- adding in the token and token secret componenets.
-tokenCredentials
-  :: (S.ByteString, S.ByteString) -> Credentials ty -> Credentials Token
-tokenCredentials (tok, tokSec) cred =
-  TokenCredentials (view clientKey cred) (view clientSecret cred) tok tokSec
-{-# INLINE tokenCredentials #-}
-
-instance Show (Credentials Client) where
-  show c = "Credentials [Client] { credClientKey = "
-           ++ view (clientKey . to show) c
-           ++ " }"
-
-instance Show (Credentials Temporary) where
-  show cred =
-    "Credentials [Temporary] { credClientKey = "
-    ++ view (clientKey . to show) cred
-    ++ ", temporaryKey = "
-    ++ view (tokenKey . to show) cred
-    ++ " }"
-
-instance Show (Credentials Token) where
-  show cred =
-    "Credentials [Token] { credClientKey = "
-    ++ view (clientKey . to show) cred
-    ++ ", tokenKey = "
-    ++ view (tokenKey . to show) cred
-    ++ " }"
+permanentCredentials :: Token Permanent -> Credentials ty -> Credentials Permanent
+permanentCredentials tok cred@ClientCredentials{}    = PermanentCredentials cred tok
+permanentCredentials tok (TemporaryCredentials cc _) = PermanentCredentials cc tok
+permanentCredentials tok (PermanentCredentials cc _) = PermanentCredentials cc tok
+{-# INLINE permanentCredentials #-}
