@@ -12,11 +12,10 @@
 -- Stability   : experimental
 -- Portability : non-portable
 --
---
--- This module exposes the simplest API for *accessing* OAuth
--- resources. Importantly, credential *generation* is outside the
--- scope of this API and it's assumed you have 'Token' level
--- credentials.
+-- This module exposes a simple monadic API for /accessing/ OAuth
+-- resources given credentials. It also exposes a few actions to
+-- simplify handling the 'ThreeLeggedFlow' protocol used for
+-- /requesting/ OAuth credentials.
 
 module Network.HTTP.Conduit.OAuth (
 
