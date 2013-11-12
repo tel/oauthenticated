@@ -18,19 +18,31 @@
 -- scope of this API and it's assumed you have 'Token' level
 -- credentials.
 
-module Network.HTTP.Conduit.OAuth -- (
-  -- -- $oauth
+module Network.HTTP.Conduit.OAuth (
+  -- $oauth_basics
 
-  -- -- * Basic
-  -- module Network.HTTP.Conduit.OAuth.Types,
+  -- * Basic
+  request, simpleRequest,
 
-  -- -- * Three Legged Flow
-  -- getTempCreds, getTok, buildAuthorizationRequest
+  OAuth, runOAuth, withCreds, newOa, send,
+  module Network.HTTP.Conduit.OAuth.Types,
 
-  -- )
-       where
+  -- ** Transformer versions
 
-import qualified Control.Exception                            as E
+  -- These have much more complex types, but allow for 'OAuthT' to be
+  -- used as something other than the base transformer.
+  OAuthT, runOAuthT, sendT,
+
+  -- * Three Legged Flow
+
+  -- $three_legged_flow
+
+  requestPermanentCredentials,
+  requestTemporaryCredentials,
+  buildAuthorizationRequest
+
+  ) where
+
 import qualified Control.Exception.Lifted                     as EL
 import           Control.Monad.Identity
 import           Control.Monad.Morph
@@ -49,8 +61,9 @@ import           Network.HTTP.Conduit.OAuth.Types.Credentials
 import           Network.HTTP.Conduit.OAuth.Types.Params
 import           Network.HTTP.Conduit.OAuth.Types.Server
 import           Network.HTTP.Conduit.OAuth.Util
+import qualified Network.HTTP.Types                           as HTTP
 
-{- $oauth
+{- $oauth_basics
 
 /OAuth/
 
@@ -71,19 +84,46 @@ server. These credentials are used to construct an authorization
 request to the user who, approving it, generates token credentials for
 the client. These token credentials allow the client to freely access
 the user's resource at a later date.
+-}
 
-/Credential Generation/
+{- $three_legged_flow
 
-Client Credentials are provided by the server. For the purposes of
-this library, they are provided externally.
+/Three-Legged Flow/
 
-Temporary Credentials are provided to the client from the server via
-an HTTP request based on the Client Credentials and other data unique
-to the particular kind of access the client is requesting from the
-user.
+In OAuth 1.0 the "three-legged flow" mechanism allows a client to
+request access to a user's protected resources with the server acting
+as an intermediary. Unsurprisingly, it happens in three steps.
+
+1. Using 'Client' 'Credentials' specific to a particular client, the
+client requests from the server a 'Temporary' 'Token' for use in the
+remaining two steps. The 'Token' along with the 'Client' 'Credentials'
+form 'Temporary' 'Credentials'.
+
+2. The client provides the 'Temporary' 'Token' 'tokenSecret' to the
+user which they provide to the server along with suitable identifying
+information in order to authorize the 'Temporary' 'Credentials' to
+request a 'Permanent' 'Token'. The server provides the user an OAuth
+/verifier/ code.
+
+3. The user returns the verifier code to the client which it uses
+along with the 'Temporary' 'Credentials' from before to construct a
+'Permanent' 'Token' request to the server. If granted, this
+'Permanent' 'Token' can be used to build 'Permanent' 'Credentials'
+which are used from then on to access OAuth protected server resources
+on behalf of the user.
+
+The final details for the three-legged flow is in how the client and
+server determine how the user will authorize requests and provide the
+verifier back to the client. During the first step the client must
+also provide a 'Callback' as part of the 'Temporary' 'Token'
+request. This callback specifies either that the verifier handoff will
+occur 'OutOfBand' or via a particular 'Callback' 'Request'. If it's
+the later then the server will put in a POST request to the 'Callback'
+URI containing the @oauth_verifier@.
 
 -}
 
+-- | Configuration information for running OAuth. Not exported.
 data OAuthConfig ty =
   OAuthConfig { _creds   :: Credentials ty
               , _serv    :: Server
@@ -106,6 +146,9 @@ manager
      -> OAuthConfig ty -> f (OAuthConfig ty)
 manager inj oac = (\x -> oac { _manager = x }) <$> inj (_manager oac)
 
+-- | An OAuth 'Monad' transformer. This holds information about the
+-- current credentials and server configuration along with resources
+-- needed to perform HTTP requests.
 newtype OAuthT ty m a =
   OAuthT (
     ReaderT (OAuthConfig ty) (ResourceT m) a
@@ -113,9 +156,19 @@ newtype OAuthT ty m a =
   deriving ( Functor, Applicative,
              Monad, MonadReader (OAuthConfig ty), MonadIO )
 
--- | 'OAuthT' defaulted to use 'IO' as the base monad.
+instance MonadTrans (OAuthT ty) where
+  lift = OAuthT . lift . lift
+
+-- | 'OAuthT' with 'IO' as the base monad. This is the preferred monad
+-- for using OAuth.
 type  OAuth ty = OAuthT ty IO
 
+-- | Execute an 'OAuthT' monad with the proper 'Credentials' and
+-- 'Server' information. This generates a new 'Client.Manager' which
+-- is used for the entirety of the 'OAuth' monad's execution. This has
+-- a sophisticated type and is only useful when it's desirable to have
+-- a different monad than 'OAuth' as your base monad. In most cases,
+-- this should be avoided.
 runOAuthT :: ( MonadUnsafeIO m, MonadThrow m
              , MonadIO m, MonadBaseControl IO m
              ) =>
@@ -123,6 +176,26 @@ runOAuthT :: ( MonadUnsafeIO m, MonadThrow m
 runOAuthT c s (OAuthT o) = Client.withManager $ \m ->
   runReaderT o (OAuthConfig c s m)
 
+-- | Streamlined API for requesting resources using 'Permanent'
+-- 'Credentials'. This provides a similar interface as
+-- 'Client.simpleHttp', but is more efficient since it will re-use the
+-- 'Manager' within the 'OAuth' monad.
+simpleRequest :: String ->
+                 OAuth Permanent (Either Client.HttpException
+                                         (Client.Response SL.ByteString))
+simpleRequest = Client.parseUrl >=> request
+
+-- | Streamlined API for requesting resource using 'Permanent'
+-- 'Credentials'. This provides a similar api as 'simpleRequest' but
+-- requires the 'Request' be generated separately.
+request :: Request ->
+           OAuth Permanent (Either Client.HttpException
+                            (Client.Response SL.ByteString))
+request req = newOa >>= flip send req
+
+-- | Execute an 'OAuth' monad with the proper 'Credentials' and
+-- 'Server' information. This generates a new 'Client.Manager' which
+-- is used for the entirety of the 'OAuth' monad's execution.
 runOAuth :: Credentials ty -> Server -> OAuth ty a -> IO a
 runOAuth = runOAuthT
 
@@ -135,11 +208,10 @@ withCreds upgrade (OAuthT o) = do
   state <- ask
   OAuthT $ lift $ runReaderT o (over creds upgrade state)
 
-
-instance MonadTrans (OAuthT ty) where
-  lift = OAuthT . lift . lift
-
--- | Lift an 'Identity'-monad 'Client.Request' into any other monad.
+-- | Lift an 'Identity'-monad 'Client.Request' into any other
+-- monad. Useful because generally @http-conduit@ requires
+-- polymorphism in its 'Client.Request' monad, but we need that monad
+-- to be 'Identity' in order to compute OAuth signing parameters.
 freeRequest :: Monad m => Client.Request Identity -> Client.Request m
 freeRequest req = req {
   Client.requestBody = case Client.requestBody req of
@@ -152,19 +224,19 @@ freeRequest req = req {
        Client.RequestBodySourceChunked (hoist (return . runIdentity) c)
   }
 
-note :: String -> Maybe a -> Either String a
-note s Nothing  = Left s
-note _ (Just a) = Right a
-
+-- | Produce a new 'Oa' parameter bundle. This will be valid for a
+-- short period of time, but can be \"refreshed\" by using @liftIO
+-- . refreshOa@.
 newOa :: MonadIO m => OAuthT ty m (Oa ty)
 newOa = do
   c <- view creds
   s <- view serv
   liftIO $ freshOa c s Nothing
 
--- | Try to send a signed 'Request'. This is a complex interface which
--- demands a lot from the base monad of 'OAuthT'. For most users,
--- 'send' is recommended.
+-- | Try to sign and send a 'Request' using some particular 'Oa'
+-- parameter bundle. This is a complex interface which demands a lot
+-- from the base monad of 'OAuthT'. For most users, 'send' is
+-- recommended.
 sendT
   :: (MonadUnsafeIO m, MonadThrow m, MonadIO m,
       MonadBaseControl IO m, EL.Exception e) =>
@@ -176,63 +248,59 @@ sendT oax req = do
   m <- view manager
   OAuthT . lift . EL.try $ Client.httpLbs signedReq m
 
--- | Try to send a signed 'Request'.
+-- | Try to sign and send a 'Request' using some particular 'Oa' parameter bundle.
 send :: Oa ty -> Request -> OAuth ty (Either Client.HttpException (Client.Response SL.ByteString))
 send = send
 
-getTempCreds' :: ThreeLeggedFlow ->
-                 OAuth Client (Either String (Credentials Temporary))
-getTempCreds' tlf = do
+lookupOrComplain :: S.ByteString -> HTTP.Query -> Either String S.ByteString
+lookupOrComplain name qs = case lookup name qs of
+  Nothing       -> Left $ "Bad credential response: missing " ++ show name
+  Just Nothing  -> Left $ "Bad credential response: missing " ++ show name
+  Just (Just s) -> Right s
+
+fmapL :: (e -> e') -> Either e a -> Either e' a
+fmapL f (Left e) = Left (f e)
+fmapL _ (Right a) = Right a
+
+-- | Using 'Client' 'Credentials', request 'Temporary' 'Credentials'
+-- via the first leg of a given 'ThreeLeggedFlow'.
+requestTemporaryCredentials
+  :: ThreeLeggedFlow -> OAuth Client (Either String (Credentials Temporary))
+requestTemporaryCredentials tlf = do
   oax <- newOa <&> set (oaCallback . _Just) (view callback tlf)
   eitRes <- send oax (view temporaryCredentialRequest tlf)
   c <- view creds
   return $ do
-    resp <- either (Left . show) Right eitRes
+    resp <- fmapL show eitRes
     let qs = HTTP.parseQuery . SL.toStrict . Client.responseBody $ resp
-    oaTok <- note "Bad credential response: missing oauth_token"
-             $ join (lookup "oauth_token"        qs)
-    oaSec <- note "Bad credential response: missing oauth_token_secret"
-             $ join (lookup "oauth_token_secret" qs)
-    return (temporaryCredentials (Token oaTok oaSec) c)
+    tok <- Token <$> lookupOrComplain "oauth_token" qs
+                 <*> lookupOrComplain "oauth_token_secret" qs
+    return (temporaryCredentials tok c)
 
+-- | Using 'Temporary' 'Credentials', request 'Permanent'
+-- 'Credentials' using a verifier 'S.ByteString' via the final leg of
+-- a given 'ThreeLeggedFlow'.
+requestPermanentCredentials
+  :: ThreeLeggedFlow -> S.ByteString -> OAuth Temporary (Either String (Credentials Permanent))
+requestPermanentCredentials tlf verifier = do
+  oax <- newOa <&> set (oaVerifier . _Just) verifier
+  eitRes <- send oax (view temporaryCredentialRequest tlf)
+  c <- view creds
+  return $ do
+    resp <- fmapL show eitRes
+    let qs = HTTP.parseQuery . SL.toStrict . Client.responseBody $ resp
+    tok <- Token <$> lookupOrComplain "oauth_token" qs
+                 <*> lookupOrComplain "oauth_token_secret" qs
+    return (permanentCredentials tok c)
 
-getTempCreds :: Credentials Client -> Callback -> Server -> ThreeLeggedFlow
-                -> IO (Either String (Credentials Temporary))
-getTempCreds cred cb srv tlf = do
-  oax <- freshOa cred srv (Just cb)
-  let req = S.sign cred srv oax (view temporaryCredentialRequest tlf)
-  tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
-  return $ case tryResp of
-    Left e     -> Left $ show (e :: E.SomeException)
-    Right resp -> do
-      let qs = HTTP.parseQuery . SL.toStrict . Client.responseBody $ resp
-      oaTok <- note "Bad credential response: missing oauth_token"
-               $ join (lookup "oauth_token"        qs)
-      oaSec <- note "Bad credential response: missing oauth_token_secret"
-               $ join (lookup "oauth_token_secret" qs)
-      return (temporaryCredentials (Token oaTok oaSec) cred)
-
-getTok :: Credentials Temporary -> Server -> ThreeLeggedFlow -> S.ByteString
-          -> IO (Either String (Credentials Permanent))
-getTok cred srv tlf verifier = do
-  let req0 = view tokenRequest tlf
-  oax0 <- freshOa cred srv Nothing
-  let oax = set (oaVerifier . _Just) verifier oax0
-  let req = S.sign cred srv oax req0
-  tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
-  return $ case tryResp of
-    Left e     -> Left $ show (e :: E.SomeException)
-    Right resp -> do
-      let qs = HTTP.parseQuery $ SL.toStrict $ Client.responseBody resp
-      oaTok <- note "Bad credential response: missing oauth_token"
-               $ join (lookup "oauth_token"        qs)
-      oaSec <- note "Bad credential response: missing oauth_token_secret"
-               $ join (lookup "oauth_token_secret" qs)
-      return (permanentCredentials (Token oaTok oaSec) cred)
-
+-- | Using 'Temporary' 'Credentials' build a 'Request' suitable for a
+-- /user/ to use in order to authorize the 'Temporary' 'Credentials'
+-- for 'requestPermanentCredentials'.
 buildAuthorizationRequest
-  :: Credentials Temporary -> ThreeLeggedFlow -> Client.Request Identity
-buildAuthorizationRequest cs tlf =
-  (view resourceOwnerAuthorize tlf) {
-    Client.queryString = "?oauth_token=" <> view tokenKey cs
+  :: ThreeLeggedFlow -> OAuth Temporary Request
+buildAuthorizationRequest tlf = do
+  let req0 = view resourceOwnerAuthorize tlf
+  tok <- view (creds . tokenKey)
+  return req0 {
+    Client.queryString = "?oauth_token=" <> tok
   }
