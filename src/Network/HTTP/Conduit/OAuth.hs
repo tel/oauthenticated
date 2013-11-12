@@ -19,10 +19,12 @@
 -- credentials.
 
 module Network.HTTP.Conduit.OAuth (
-  -- $oauth_basics
 
-  -- * Basic
   request, simpleRequest,
+
+  -- * Basics
+
+  -- $oauth_basics
 
   OAuth, runOAuth, withCreds, newOa, send,
   module Network.HTTP.Conduit.OAuth.Types,
