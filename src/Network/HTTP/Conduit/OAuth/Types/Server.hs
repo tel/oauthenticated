@@ -32,7 +32,6 @@ module Network.HTTP.Conduit.OAuth.Types.Server (
   ) where
 
 import           Control.Applicative
-import           Control.Failure
 import           Control.Monad
 import qualified Network.HTTP.Conduit                      as Client
 import           Network.HTTP.Conduit.OAuth.Types.Basic
@@ -118,9 +117,8 @@ oauthVersion
 oauthVersion inj (Server p s v) = Server p s <$> inj v
 {-# INLINE oauthVersion #-}
 
-parseThreeLeggedFlow :: Failure Client.HttpException m
-                        => String -> String -> String -> Callback
-                        -> m ThreeLeggedFlow
+parseThreeLeggedFlow :: String -> String -> String -> Callback
+                        -> Either Client.HttpException ThreeLeggedFlow
 parseThreeLeggedFlow tcr ror tr cb
   = ThreeLeggedFlow
     `liftM` Client.parseUrl tcr
