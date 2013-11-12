@@ -62,7 +62,6 @@ import           Network.HTTP.Conduit.OAuth.Types.Credentials
 import           Network.HTTP.Conduit.OAuth.Types.Params
 import           Network.HTTP.Conduit.OAuth.Types.Server
 import           Network.HTTP.Conduit.OAuth.Util
-import qualified Network.HTTP.Types                           as HTTP
 
 {- $oauth_basics
 
