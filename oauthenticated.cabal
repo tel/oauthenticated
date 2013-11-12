@@ -1,5 +1,5 @@
 name:                oauthenticated
-version:             0.1.0.0
+version:             0.0.1
 synopsis:            Simple OAuth client code built atop http-conduit
 
 description:         
