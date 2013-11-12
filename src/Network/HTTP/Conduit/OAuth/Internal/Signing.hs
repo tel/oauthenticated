@@ -3,51 +3,48 @@
 -- | Finalizing 'Client.Request's using 'Oa' parameters
 module Network.HTTP.Conduit.OAuth.Internal.Signing where
 
-import qualified Blaze.ByteString.Builder         as Blaze
+import qualified Blaze.ByteString.Builder                     as Blaze
 import           Control.Applicative
 import           Control.Arrow
 import           Control.Monad.Identity
-import           Crypto.Hash.SHA1                 (hash)
-import           Crypto.MAC.HMAC                  (hmac)
-import qualified Data.ByteString                  as S
-import qualified Data.ByteString.Base64           as S64
-import qualified Data.ByteString.Char8            as S8
-import qualified Data.ByteString.Lazy             as SL
-import           Data.Char                        (toUpper)
+import           Crypto.Hash.SHA1                             (hash)
+import           Crypto.MAC.HMAC                              (hmac)
+import qualified Data.ByteString                              as S
+import qualified Data.ByteString.Base64                       as S64
+import qualified Data.ByteString.Char8                        as S8
+import qualified Data.ByteString.Lazy                         as SL
+import           Data.Char                                    (toUpper)
 import           Data.Conduit
-import qualified Data.Conduit.List                as Conduit
-import           Data.List                        (sort)
+import qualified Data.Conduit.List                            as Conduit
+import           Data.List                                    (sort)
 import           Data.Maybe
 import           Data.Monoid
-import qualified Network.HTTP.Conduit             as Client
-import           Network.HTTP.Conduit.OAuth.Types
-import qualified Network.HTTP.Types.Header        as HTTP
-import qualified Network.HTTP.Types.URI           as HTTP
-
-sign :: Credentials ty -> Server -> Oa ty -> Client.Request Identity -> Client.Request Identity
-sign creds srv oax req0 =
-  let base = buildBaseString req0 oax
-      key  = credSigningKey creds
-      sig  = S64.encode (hmac hash 64 key base)
-      oax' = oax { oaSignature = Just sig }
-  in augmentRequest srv oax' req0
+import qualified Network.HTTP.Conduit                         as Client
+import           Network.HTTP.Conduit.OAuth.Types.Basic
+import           Network.HTTP.Conduit.OAuth.Types.Credentials
+import           Network.HTTP.Conduit.OAuth.Types.Params
+import           Network.HTTP.Conduit.OAuth.Types.Server
+import           Network.HTTP.Conduit.OAuth.Util
+import qualified Network.HTTP.Types.Header                    as HTTP
+import qualified Network.HTTP.Types.URI                       as HTTP
 
 -- | Build the proper 'Oa' parameters into a 'Client.Request' and sign
 -- it. All of the necessary request parameters should have been put
 -- into the 'Client.Request' prior to this step as any further
 -- modification of the HTTP method, URL, query string, body, or
 -- @Authorization@ header will invalidate the request.
-freeze :: Credentials ty -> Server
-          -> Client.Request Identity -> IO (Client.Request Identity)
-freeze creds srv req0  = do
-  oax <- freshOa creds srv
-  return (sign creds srv oax req0)
-
+sign :: Credentials ty -> Server -> Oa ty -> Client.Request Identity -> Client.Request Identity
+sign creds srv oax req0 =
+  let base = buildBaseString req0 oax
+      key  = signingKey creds
+      sig  = S64.encode (hmac hash 64 key base)
+      oax' = set (oaSignature . _Just) sig oax
+  in augmentRequest srv oax' req0
 
 -- | Add the 'Oa' parameters to the 'Client.Request' according to the
 -- 'Server'\'s convention.
 augmentRequest :: Server -> Oa ty -> Client.Request Identity -> Client.Request Identity
-augmentRequest srv oax req = case parameterMethod srv of
+augmentRequest srv oax req = case view parameterMethod srv of
   AuthorizationHeader ->
     let
       hdrs0   = Client.requestHeaders req

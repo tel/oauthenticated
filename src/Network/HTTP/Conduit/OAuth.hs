@@ -50,17 +50,21 @@ user.
 
 module Network.HTTP.Conduit.OAuth where
 
-import qualified Control.Exception                           as E
+import qualified Control.Exception                            as E
 import           Control.Monad.Identity
 import           Control.Monad.Morph
-import qualified Data.ByteString                             as S
-import qualified Data.ByteString.Lazy                        as SL
+import qualified Data.ByteString                              as S
+import qualified Data.ByteString.Lazy                         as SL
 import           Data.Monoid
-import qualified Network.HTTP.Conduit                        as Client
-import qualified Network.HTTP.Types.URI                      as HTTP
+import qualified Network.HTTP.Conduit                         as Client
+import qualified Network.HTTP.Types.URI                       as HTTP
 
 import           Network.HTTP.Conduit.OAuth.Internal.Signing
 import           Network.HTTP.Conduit.OAuth.Types
+import           Network.HTTP.Conduit.OAuth.Types.Credentials
+import           Network.HTTP.Conduit.OAuth.Types.Params
+import           Network.HTTP.Conduit.OAuth.Types.Server
+import           Network.HTTP.Conduit.OAuth.Util
 
 -- | Lift an 'Identity'-monad 'Client.Request' into any other monad.
 freeRequest :: Monad m => Client.Request Identity -> Client.Request m
@@ -79,9 +83,11 @@ note :: String -> Maybe a -> Either String a
 note s Nothing  = Left s
 note _ (Just a) = Right a
 
-getTempCreds :: Credentials Client -> Server -> IO (Either String (Credentials Temporary))
-getTempCreds cred srv = do
-  req <- freeze cred srv (temporaryCredentialRequest srv)
+getTempCreds :: Credentials Client -> Callback -> Server -> ThreeLeggedFlow
+                -> IO (Either String (Credentials Temporary))
+getTempCreds cred cb srv tlf = do
+  oax <- freshOa cred srv (Just cb)
+  let req = sign cred srv oax (view temporaryCredentialRequest tlf)
   tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
   return $ case tryResp of
     Left e     -> Left $ show (e :: E.SomeException)
@@ -91,14 +97,14 @@ getTempCreds cred srv = do
                $ join (lookup "oauth_token"        qs)
       oaSec <- note "Bad credential response: missing oauth_token_secret"
                $ join (lookup "oauth_token_secret" qs)
-      return (createTemporaryCredentials oaTok oaSec cred)
+      return (temporaryCredentials (oaTok, oaSec) cred)
 
-getTok :: Credentials Temporary -> Server -> S.ByteString
+getTok :: Credentials Temporary -> Server -> ThreeLeggedFlow -> S.ByteString
           -> IO (Either String (Credentials Token))
-getTok cred srv verifier = do
-  let req0 = tokenRequest srv
-  oax0 <- freshOa cred srv
-  let oax = oax0 { oaVerifier = Just verifier }
+getTok cred srv tlf verifier = do
+  let req0 = view tokenRequest tlf
+  oax0 <- freshOa cred srv Nothing
+  let oax = set (oaVerifier . _Just) verifier oax0
   let req = sign cred srv oax req0
   tryResp <- E.try (Client.withManager $ Client.httpLbs $ freeRequest req)
   return $ case tryResp of
@@ -109,10 +115,11 @@ getTok cred srv verifier = do
                $ join (lookup "oauth_token"        qs)
       oaSec <- note "Bad credential response: missing oauth_token_secret"
                $ join (lookup "oauth_token_secret" qs)
-      return (createTokenCredentials oaTok oaSec cred)
+      return (tokenCredentials (oaTok, oaSec) cred)
 
-buildAuthorizationRequest :: Credentials Temporary -> Server -> Client.Request Identity
-buildAuthorizationRequest creds srv =
-  (resourceOwnerAuthorize srv) {
-    Client.queryString = "?oauth_token=" <> credToken creds
+buildAuthorizationRequest :: Credentials Temporary -> Server -> ThreeLeggedFlow
+                             -> Client.Request Identity
+buildAuthorizationRequest creds srv tlf =
+  (view resourceOwnerAuthorize tlf) {
+    Client.queryString = "?oauth_token=" <> view tokenKey creds
   }

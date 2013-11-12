@@ -3,47 +3,46 @@
 {-# LANGUAGE TupleSections #-}
 
 module Network.HTTP.Conduit.OAuth.Util (
-  view, over, iso, from, prism, preview, to, _Just, _Nothing
+  view, over, set, iso, from, prism, preview, to, _Just, _Nothing
   ) where
 
 import           Control.Applicative
+import           Data.Functor.Constant
 import           Data.Functor.Contravariant
+import           Data.Functor.Identity
 import           Data.Monoid
 import           Data.Profunctor
 import           Data.Profunctor.Unsafe
 import           Unsafe.Coerce
 
+
 -- mu Lens
 --------------------------------------------------------------------------------
 
--- Lens: (forall f. Functor f => (a -> f a) -> (b -> f b))
-
-newtype I a   = I { unI :: a } deriving ( Functor )
-newtype K b a = K { unK :: b } deriving ( Functor )
-
-instance Contravariant (K b) where
-  contramap _ (K b) = K b
-
-view :: (forall f. (Contravariant f, Functor f) => (a -> f b) -> s -> f t) -> s -> a
-view inj = unK . inj K
+view :: ((a -> Constant a a) -> s -> Constant a s) -> s -> a
+view inj = getConstant . inj Constant
 {-# INLINE view #-}
 
-over :: (forall f. Functor f => (a -> f b) -> s -> f t) -> (a -> b) -> (s -> t)
-over inj f = unI . inj (I . f)
+over :: Profunctor p => (p a (Identity b) -> p s (Identity t)) -> p a b -> p s t
+over inj f = runIdentity #. inj (Identity #. f)
 {-# INLINE over #-}
+
+set :: ((a -> Identity b) -> s -> Identity t) -> b -> s -> t
+set l = over l . const
+{-# INLINE set #-}
 
 iso :: Profunctor p => (s -> a) -> (b -> t) -> p a b -> p s t
 iso = dimap
 {-# INLINE iso #-}
 
-type AnIso s t a b = X a b a (I b) -> X a b s (I t)
+type AnIso s t a b = X a b a (Identity b) -> X a b s (Identity t)
 
 withIso :: AnIso s t a b -> ((s -> a) -> (b -> t) -> r) -> r
-withIso ai k = case ai (X id I) of
-  X sa bt -> k sa (unI #. bt)
+withIso ai k = case ai (X id Identity) of
+  X sa bt -> k sa (runIdentity #. bt)
 {-# INLINE withIso #-}
 
-from :: Profunctor p => AnIso s t a b -> (p t s -> p b a)
+from :: Profunctor p => AnIso s t a b -> p t s -> p b a
 from l = withIso l $ \ sa bt -> iso bt sa
 {-# INLINE from #-}
 
@@ -69,11 +68,11 @@ prism bt seta = dimap seta (either pure (fmap bt)) . right'
 
 foldMapOf
   :: (Profunctor p, Profunctor p1) =>
-     (p1 a2 (K b a3) -> p a (K c a1)) -> p1 a2 b -> p a c
-foldMapOf l f = unK #. l (K #. f)
+     (p1 a2 (Constant b a3) -> p a (Constant c a1)) -> p1 a2 b -> p a c
+foldMapOf l f = getConstant #. l (Constant #. f)
 {-# INLINE foldMapOf #-}
 
-preview :: ((a -> K (First a) a) -> s -> K (First a) s) -> s -> Maybe a
+preview :: ((a -> Constant (First a) a) -> s -> Constant (First a) s) -> s -> Maybe a
 preview l = getFirst #. foldMapOf l (First #. Just)
 {-# INLINE preview #-}
 
@@ -101,3 +100,6 @@ _Nothing :: (Applicative f, Choice p) =>
             p () (f b) -> p (Maybe a1) (f (Maybe a))
 _Nothing = prism (const Nothing) $ maybe (Right ()) (const $ Left Nothing)
 {-# INLINE _Nothing #-}
+
+_1 :: Functor f => (t -> f a) -> (t, t1) -> f (a, t1)
+_1 inj (a, b) = (,b) <$> inj a

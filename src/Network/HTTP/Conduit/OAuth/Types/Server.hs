@@ -23,7 +23,7 @@ module Network.HTTP.Conduit.OAuth.Types.Server (
   -- * Lenses
 
   -- ** Server
-  parameterMethod, signatureMethod, oauthVersion,
+  threeLeggedFlow, parameterMethod, signatureMethod, oauthVersion,
 
   -- ** ThreeLeggedFlow
   temporaryCredentialRequest, resourceOwnerAuthorize, tokenRequest,
@@ -121,8 +121,7 @@ signatureMethod inj (Server tlf p s v) =
 
 oauthVersion
   :: Functor f => (Version -> f Version) -> Server -> f Server
-oauthVersion inj (Server tlf p s v) =
-  (\v' -> Server tlf p s v') <$> inj v
+oauthVersion inj (Server tlf p s v) = Server tlf p s <$> inj v
 {-# INLINE oauthVersion #-}
 
 parseThreeLeggedFlow :: Failure Client.HttpException m
@@ -130,6 +129,6 @@ parseThreeLeggedFlow :: Failure Client.HttpException m
                         -> m ThreeLeggedFlow
 parseThreeLeggedFlow tcr ror tr
   = ThreeLeggedFlow
-    `liftM` (Client.parseUrl tcr)
-    `ap`    (Client.parseUrl ror)
-    `ap`    (Client.parseUrl tr)
+    `liftM` Client.parseUrl tcr
+    `ap`    Client.parseUrl ror
+    `ap`    Client.parseUrl tr
