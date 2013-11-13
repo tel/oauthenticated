@@ -73,6 +73,7 @@ data Oa ty = Oa { _oaVersion         :: Version
                 , _oaSignature       :: Maybe S.ByteString
                   -- ^ Generated in the final step
                 }
+             deriving ( Show )
 
 oaVersion :: Functor f => (Version -> f Version) -> Oa ty -> f (Oa ty)
 oaVersion inj oax =
@@ -115,10 +116,6 @@ oaSignature :: Functor f => (Maybe S.ByteString -> f (Maybe S.ByteString))
                -> Oa ty -> f (Oa ty)
 oaSignature inj oax =
   (\x -> oax { _oaSignature = x }) <$> inj (_oaSignature oax)
-
-deriving instance Show (Oa Client)
-deriving instance Show (Oa Temporary)
-deriving instance Show (Oa Permanent)
 
 -- | Creates a pure, unsigned 'Oa'. This does not include the
 -- 'oaVerifier' so those must be added manually if used.
