@@ -125,9 +125,8 @@ URI containing the @oauth_verifier@.
 
 -- | Configuration information for running OAuth. Not exported.
 data OAuthConfig ty =
-  OAuthConfig { _creds   :: Credentials ty
-              , _serv    :: Server
-              , _manager :: Client.Manager
+  OAuthConfig { _creds :: Credentials ty
+              , _serv  :: Server
               }
 creds
   :: Functor f =>
@@ -140,41 +139,32 @@ serv
      (Server -> f Server) -> OAuthConfig ty -> f (OAuthConfig ty)
 serv inj oac    = (\x -> oac { _serv = x })    <$> inj (_serv oac)
 
-manager
-  :: Functor f =>
-     (Client.Manager -> f Client.Manager)
-     -> OAuthConfig ty -> f (OAuthConfig ty)
-manager inj oac = (\x -> oac { _manager = x }) <$> inj (_manager oac)
-
 -- | An OAuth 'Monad' transformer. This holds information about the
 -- current credentials and server configuration along with resources
 -- needed to perform HTTP requests.
 newtype OAuthT ty m a =
   OAuthT (
-    ReaderT (OAuthConfig ty) (ResourceT m) a
+    ReaderT (OAuthConfig ty) m a
     )
   deriving ( Functor, Applicative,
              Monad, MonadReader (OAuthConfig ty), MonadIO )
 
 instance MonadTrans (OAuthT ty) where
-  lift = OAuthT . lift . lift
+  lift = OAuthT . lift
 
 -- | 'OAuthT' with 'IO' as the base monad. This is the preferred monad
 -- for using OAuth.
-type  OAuth ty = OAuthT ty IO
+type OAuth ty = OAuthT ty IO
 
 -- | Execute an 'OAuthT' monad with the proper 'Credentials' and
--- 'Server' information. This generates a new 'Client.Manager' which
--- is used for the entirety of the 'OAuth' monad's execution. This has
--- a sophisticated type and is only useful when it's desirable to have
--- a different monad than 'OAuth' as your base monad. In most cases,
--- this should be avoided.
+-- 'Server' information. This has a sophisticated type and is only
+-- useful when it's desirable to have a different monad than 'OAuth'
+-- as your base monad. In most cases, this should be avoided.
 runOAuthT :: ( MonadUnsafeIO m, MonadThrow m
              , MonadIO m, MonadBaseControl IO m
              ) =>
              Credentials ty -> Server -> OAuthT ty m a -> m a
-runOAuthT c s (OAuthT o) = Client.withManager $ \m ->
-  runReaderT o (OAuthConfig c s m)
+runOAuthT c s (OAuthT o) = runReaderT o (OAuthConfig c s)
 
 -- | Streamlined API for requesting resources using 'Permanent'
 -- 'Credentials'. This provides a similar interface as
@@ -245,10 +235,10 @@ sendT oax req = do
   c <- view creds
   s <- view serv
   let signedReq = freeRequest (S.sign c s oax req)
-  m <- view manager
-  OAuthT . lift . EL.try $ Client.httpLbs signedReq m
+  OAuthT . lift . EL.try $ Client.withManager (Client.httpLbs signedReq)
 
--- | Try to sign and send a 'Request' using some particular 'Oa' parameter bundle.
+-- | Try to sign and send a 'Request' using some particular 'Oa'
+-- parameter bundle.
 send :: Oa ty -> Request -> OAuth ty (Either Client.HttpException (Client.Response SL.ByteString))
 send = send
 
