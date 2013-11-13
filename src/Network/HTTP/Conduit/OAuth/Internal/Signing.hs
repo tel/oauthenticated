@@ -28,6 +28,8 @@ import           Network.HTTP.Conduit.OAuth.Util
 import qualified Network.HTTP.Types.Header                    as HTTP
 import qualified Network.HTTP.Types.URI                       as HTTP
 
+import           Debug.Trace
+
 -- | Build the proper 'Oa' parameters into a 'Client.Request' and sign
 -- it. All of the necessary request parameters should have been put
 -- into the 'Client.Request' prior to this step as any further
@@ -38,7 +40,7 @@ sign creds srv oax req0 =
   let base = buildBaseString req0 oax
       key  = signingKey creds
       sig  = S64.encode (hmac hash 64 key base)
-      oax' = set (oaSignature . _Just) sig oax
+      oax' = set oaSignature (Just sig) oax
   in augmentRequest srv oax' req0
 
 -- | Add the 'Oa' parameters to the 'Client.Request' according to the
