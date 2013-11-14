@@ -1,5 +1,5 @@
 name:                oauthenticated
-version:             0.0.2
+version:             0.0.3
 synopsis:            Simple OAuth client code built atop http-conduit
 
 description:         
@@ -56,12 +56,10 @@ library
                      , cryptohash          >= 0.11.1   && <  0.12
                      , http-conduit        >= 1.9.5.1  && <  1.10
                      , http-types          >= 0.8.2    && <  0.9
-                     , lifted-base         >= 0.2.1.1  && <  0.3
                      , mmorph              >= 1.0.0    && <  2.0
                      , mtl                 >= 2.1.2    && <  2.2
                      , profunctors         >= 4.0.1    && <  4.1
                      , random              >= 1.0.1.1  && <  1.1
-                     , resourcet           >= 0.4.9    && <  0.5
                      , time                >= 1.4.0.1  && <  1.5
                      , transformers        >= 0.3.0.0  && <  0.4
   hs-source-dirs:      src         

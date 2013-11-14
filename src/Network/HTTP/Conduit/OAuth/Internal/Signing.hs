@@ -28,8 +28,6 @@ import           Network.HTTP.Conduit.OAuth.Util
 import qualified Network.HTTP.Types.Header                    as HTTP
 import qualified Network.HTTP.Types.URI                       as HTTP
 
-import           Debug.Trace
-
 -- | Build the proper 'Oa' parameters into a 'Client.Request' and sign
 -- it. All of the necessary request parameters should have been put
 -- into the 'Client.Request' prior to this step as any further

@@ -44,11 +44,10 @@ module Network.HTTP.Conduit.OAuth (
 
   ) where
 
-import qualified Control.Exception.Lifted                     as EL
+import qualified Control.Exception                            as E
 import           Control.Monad.Identity
 import           Control.Monad.Morph
 import           Control.Monad.Reader
-import           Control.Monad.Trans.Resource
 import qualified Data.ByteString                              as S
 import qualified Data.ByteString.Lazy                         as SL
 import           Data.Monoid
@@ -160,10 +159,7 @@ type OAuth ty = OAuthT ty IO
 -- 'Server' information. This has a sophisticated type and is only
 -- useful when it's desirable to have a different monad than 'OAuth'
 -- as your base monad. In most cases, this should be avoided.
-runOAuthT :: ( MonadUnsafeIO m, MonadThrow m
-             , MonadIO m, MonadBaseControl IO m
-             ) =>
-             Credentials ty -> Server -> OAuthT ty m a -> m a
+runOAuthT :: Credentials t -> Server -> OAuthT t m a -> m a
 runOAuthT c s (OAuthT o) = runReaderT o (OAuthConfig c s)
 
 -- | Streamlined API for requesting resources using 'Permanent'
@@ -228,19 +224,18 @@ newOa = do
 -- from the base monad of 'OAuthT'. For most users, 'send' is
 -- recommended.
 sendT
-  :: (MonadUnsafeIO m, MonadThrow m, MonadIO m,
-      MonadBaseControl IO m, EL.Exception e) =>
+  :: (MonadIO m, E.Exception e) =>
      Oa ty -> Request -> OAuthT ty m (Either e (Client.Response SL.ByteString))
 sendT oax req = do
   c <- view creds
   s <- view serv
   let signedReq = freeRequest (S.sign c s oax req)
-  OAuthT . lift . EL.try $ Client.withManager (Client.httpLbs signedReq)
+  liftIO . E.try $ Client.withManager (Client.httpLbs signedReq)
 
 -- | Try to sign and send a 'Request' using some particular 'Oa'
 -- parameter bundle.
 send :: Oa ty -> Request -> OAuth ty (Either Client.HttpException (Client.Response SL.ByteString))
-send = send
+send = sendT
 
 lookupOrComplain :: S.ByteString -> HTTP.Query -> Either String S.ByteString
 lookupOrComplain name qs = case lookup name qs of
