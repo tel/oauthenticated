@@ -38,12 +38,6 @@ over :: ((a -> Identity b) -> s -> Identity t) -> (a -> b) -> s -> t
 over inj f = runIdentity . inj (Identity . f)
 {-# INLINE over #-}
 
--- More generic version, requires profunctors
---
--- over :: Profunctor p => (p a (Identity b) -> p s (Identity t)) -> p a b -> p s t
--- over inj f = runIdentity #. inj (Identity #. f)
--- {-# INLINE over #-}
-
 set :: ((a -> Identity b) -> s -> Identity t) -> b -> s -> t
 set l = over l . const
 {-# INLINE set #-}
