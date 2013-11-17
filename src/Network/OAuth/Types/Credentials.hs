@@ -12,14 +12,14 @@
 --
 -- Credentials, 'Cred's, are built from 'Token's, public/private key pairs, and
 -- come in 3 varieties.
--- 
+--
 -- - 'Client': Represents a particular client or consumer, used as part of
 -- every transaction that client signs.
--- 
+--
 -- - 'Temporary': Resource token representing a short-lived grant to access a
 -- restricted set of server resources on behalf of the user. Typically used as
 -- part of a authorization negotiation protocol.
--- 
+--
 -- - 'Permanent': Resource token representing a long-lived grant to access an
 -- authorized set of server resources on behalf of the user. Outside of access
 -- negotiation this is the most common kind of resource 'Token'.
@@ -32,12 +32,12 @@
 module Network.OAuth.Types.Credentials (
   -- * Tokens and their parameterization
   Token (..), Key, Secret, Client, Temporary, Permanent, ResourceToken,
-  
+
   -- ** Deserialization
   fromUrlEncoded,
-  
+
   -- * Credentials and credential construction
-  Cred, clientCred, temporaryCred, permanentCred, 
+  Cred, clientCred, temporaryCred, permanentCred,
 
   -- * Accessors
   key, secret, clientToken, resourceToken, getResourceTokenDef, signingKey
@@ -49,7 +49,7 @@ import           Data.Aeson
 import qualified Data.ByteString      as S
 import           Data.Data
 import           Data.Monoid
-import           Network.HTTP.Types   (urlEncode, parseQuery)
+import           Network.HTTP.Types   (parseQuery, urlEncode)
 import           Network.OAuth.MuLens
 import           Network.OAuth.Util
 
@@ -144,8 +144,8 @@ clientToken inj (CredAndToken k s tok) = fixUp <$> inj (Token k s) where
 -- | Some 'Cred's have resource 'Token' information, i.e. either 'Temporary' or
 -- 'Permanent' credentials. This lens can be used to change the type of a
 -- 'Cred'.
-resourceToken 
-  :: (ResourceToken ty, ResourceToken ty') => 
+resourceToken
+  :: (ResourceToken ty, ResourceToken ty') =>
      Lens (Cred ty) (Cred ty') (Token ty) (Token ty')
 resourceToken inj (CredAndToken k s tok) = CredAndToken k s <$> inj tok
 {-# INLINE resourceToken #-}
