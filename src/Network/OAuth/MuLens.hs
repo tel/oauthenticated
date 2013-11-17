@@ -14,17 +14,20 @@
 
 module Network.OAuth.MuLens (
   -- * Basics
-  Lens, Traversal, Prism, Iso, view, preview, set,
+  Lens, Traversal, Prism, Iso, view, use, preview, set,
   -- * Generalizations
   over, foldMapOf,
   -- * Building
   lens, iso, prism,
+  -- * Tools
+  zoom,
   -- * Convenience
-  (<&>), (&), (^.), (.~)
+  (<&>), (&), (^.), (.~), (%~), (<~)
   ) where
 
 import           Control.Applicative
 import           Control.Monad.Reader
+import           Control.Monad.State
 import           Data.Functor.Constant
 import           Data.Functor.Identity
 import           Data.Monoid
@@ -39,6 +42,10 @@ type Traversal s t a b = forall f   . (Applicative f)       => (a -> f b) -> s -
 view :: MonadReader s m => ((a -> Constant a a) -> s -> Constant a s) -> m a
 view inj = asks (foldMapOf inj id)
 {-# INLINE view #-}
+
+use  :: MonadState s m => ((a -> Constant a a) -> s -> Constant a s) -> m a
+use inj = foldMapOf inj id `liftM` get
+{-# INLINE use #-}
 
 preview :: ((a -> Constant (First a) a) -> s -> Constant (First a) s) -> s -> Maybe a
 preview l = getFirst #. foldMapOf l (First #. Just)
@@ -55,6 +62,13 @@ set l = over l . const
 foldMapOf :: ((a -> Constant r b) -> s -> Constant r t) -> (a -> r) -> s -> r
 foldMapOf inj f = getConstant . inj (Constant . f)
 {-# INLINE foldMapOf #-}
+
+zoom :: Monad m => Lens s s t t -> StateT t m a -> StateT s m a
+zoom l m = do
+  t <- use l
+  (a, t') <- lift $ runStateT m t
+  modify (l .~ t')
+  return a
 
 lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
 lens gt st inj x = st x <$> inj (gt x)
@@ -86,6 +100,15 @@ infixl 8 ^.
 {-# INLINE (^.) #-}
 
 infixr 4 .~
-(.~) :: ((a -> Identity b) -> s -> Identity t) -> (a -> b) -> s -> t
-(.~) = over
+(.~) :: ((a -> Identity b) -> s -> Identity t) -> b -> s -> t
+(.~) = set
 {-# INLINE (.~) #-}
+
+infixr 4 %~
+(%~) :: ((a -> Identity b) -> s -> Identity t) -> (a -> b) -> s -> t
+(%~) = over
+{-# INLINE (%~) #-}
+
+infixr 2 <~
+(<~) :: MonadState s m => ((a -> Identity b) -> s -> Identity s) -> m b -> m ()
+l <~ m = do { a <- m; modify (l .~ a) }

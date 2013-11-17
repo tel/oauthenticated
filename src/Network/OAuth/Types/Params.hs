@@ -29,7 +29,6 @@ import           Data.Time
 import           Data.Time.Clock.POSIX
 import           Network.HTTP.Client.Request     (getUri)
 import           Network.HTTP.Client.Types       (Request)
-import           Network.HTTP.Types              (urlEncode)
 import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.Types.Credentials
 import           Network.OAuth.Util

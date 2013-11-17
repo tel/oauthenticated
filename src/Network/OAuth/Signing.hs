@@ -38,7 +38,16 @@ import           Network.OAuth.Types.Credentials
 import           Network.OAuth.Types.Params
 import           Network.OAuth.Util
 import           Network.URI
+import Crypto.Random
 
+-- | Sign a request with a fresh set of parameters.
+oauth :: CPRG gen => Cred Permanent -> Server -> C.Request -> gen -> IO (C.Request, gen)
+oauth creds sv req gen = do
+  (pinx, gen') <- freshPin gen
+  let oax = Oa { credentials = creds, workflow = Standard, pin = pinx }
+  return $ (sign oax sv req, gen')
+
+-- | Sign a request given generated parameters
 sign :: Oa ty -> Server -> C.Request -> C.Request
 sign oax server req =
   let payload = canonicalBaseString oax server req
