@@ -106,8 +106,7 @@ canonicalBaseString oax server req =
 canonicalParams :: Oa ty -> Server -> C.Request -> S.ByteString
 canonicalParams oax server req =
   let build :: H.QueryItem -> S.ByteString
-      build (k, mayV) =
-	pctEncode k <> maybe S.empty (\v -> "=" <> pctEncode v) mayV
+      build (k, mayV) = pctEncode k <> maybe S.empty (\v -> "=" <> pctEncode v) mayV
 
       combine :: [S.ByteString] -> S.ByteString
       combine = pctEncode . S8.intercalate "&"
@@ -153,9 +152,9 @@ canonicalUri req =
     fauthority Nothing               = ""
     fauthority (Just (URIAuth {..})) =
       let -- Canonical URIs do not display their port unless it is non-standard
-	  fport | (uriPort == ":443") && (uriScheme == "https:") = ""
-		| (uriPort == ":80" ) && (uriScheme == "http:" ) = ""
-		| otherwise                                      = uriPort
+	        fport | (uriPort == ":443") && (uriScheme == "https:") = ""
+            		| (uriPort == ":80" ) && (uriScheme == "http:" ) = ""
+		            | otherwise                                      = uriPort
       in  uriRegName <> fport
 
 -- | Queries a 'C.Request' body and tries to interpret it as a set of OAuth
