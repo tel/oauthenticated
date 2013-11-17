@@ -13,7 +13,7 @@
 
 module Network.OAuth.Types.Credentials (
   -- * Basic credential types
-  Token (..), Cred (..), Client, Temporary, Permanent,
+  Token (..), Cred (..), Key, Secret, Client, Temporary, Permanent,
   -- ** Constructors
   clientCred, temporaryCred, permanentCred, fromUrlEncoded,
   -- * Accessors
@@ -28,17 +28,41 @@ import           Data.Data
 import           Data.Monoid
 import           Network.HTTP.Types   (urlEncode, parseQuery)
 import           Network.OAuth.MuLens
+import           Network.OAuth.Util
 
 -- Constructors aren't exported. They're only used for derivation
 -- purposes.
 
+-- | 'Client' 'Cred'entials and 'Token's are assigned to a particular client by
+-- the server and are used for all requests sent by that client. They form the
+-- core component of resource specific credentials.
 data Client    = Client    deriving ( Data, Typeable )
+
+-- | 'Temporary' 'Token's and 'Cred'entials are created during authorization
+-- protocols and are rarely meant to be kept for more than a few minutes.
+-- Typically they are authorized to access only a very select set of server
+-- resources. During \"three-legged authorization\" in OAuth 1.0 they are used
+-- to generate the authorization request URI the client sends and, after that,
+-- in the 'Permanent' 'Token' request.
 data Temporary = Temporary deriving ( Data, Typeable )
+
+-- | 'Permanent' 'Token's and 'Cred'entials are the primary means of accessing
+-- server resources. They must be maintained by the client for each user who
+-- authorizes that client to access resources on their behalf.
 data Permanent = Permanent deriving ( Data, Typeable )
 
--- | 'Token's are public, private pairs and come in many varieties,
+-- | 'Token' 'Key's are public keys which allow a server to uniquely identify a
+-- particular 'Token'.
+type Key    = S.ByteString
+
+-- | 'Token' 'Secret's are private keys which the 'Token' uses for
+-- cryptographic purposes.
+type Secret = S.ByteString
+
+-- | 'Token's are public, private key pairs and come in many varieties,
 -- 'Client', 'Temporary', and 'Permanent'.
-data Token ty = Token {-# UNPACK #-} !S.ByteString {-# UNPACK #-} !S.ByteString
+data Token ty = Token {-# UNPACK #-} !Key
+                      {-# UNPACK #-} !Secret
   deriving ( Show, Eq, Ord, Data, Typeable )
 
 -- | Parses a JSON object with keys @oauth_token@ and @oauth_token_secret@, the
@@ -61,44 +85,52 @@ fromUrlEncoded = tryParse . parseQuery where
                      <*> lookupV "oauth_token_secret" q
   lookupV k = join . lookup k
 
-key :: Lens (Token ty) (Token ty) S.ByteString S.ByteString
+key :: Lens (Token ty) (Token ty) Key Key
 key inj (Token k s) = (`Token` s) <$> inj k
 {-# INLINE key #-}
 
-secret :: Lens (Token ty) (Token ty) S.ByteString S.ByteString
+secret :: Lens (Token ty) (Token ty) Secret Secret
 secret inj (Token k s) = Token k <$> inj s
 {-# INLINE secret #-}
 
 -- | 'Cred'entials pair a 'Client' 'Token' and either a 'Temporary' or
 -- 'Permanent' token corresponding to a particular set of user
 -- resources on the server.
-data Cred ty =
-  Cred !S.ByteString !S.ByteString (Maybe (Token ty))
+data Cred ty = Cred         {-# UNPACK #-} !Key {-# UNPACK #-} !Secret
+             | CredAndToken {-# UNPACK #-} !Key {-# UNPACK #-} !Secret {-# UNPACK #-} !(Token ty)
   deriving ( Show, Eq, Ord, Data, Typeable )
 
 clientToken :: Lens (Cred ty) (Cred ty) (Token Client) (Token Client)
-clientToken inj (Cred k s tok) = fixUp <$> inj (Token k s) where
-  fixUp (Token k' s') = Cred k' s' tok
+clientToken inj (Cred k s) = fixUp <$> inj (Token k s) where
+  fixUp (Token k' s') = Cred k' s'
+clientToken inj (CredAndToken k s tok) = fixUp <$> inj (Token k s) where
+  fixUp (Token k' s') = CredAndToken k' s' tok
 {-# INLINE clientToken #-}
 
 resourceToken :: Lens (Cred ty) (Cred ty') (Maybe (Token ty)) (Maybe (Token ty'))
-resourceToken inj (Cred k s mtok) = Cred k s <$> inj mtok
+resourceToken inj c = case c of 
+  Cred         k s     -> build k s <$> inj Nothing
+  CredAndToken k s tok -> build k s <$> inj (Just tok)
+  where
+    build k s Nothing    = Cred k s
+    build k s (Just tok) = CredAndToken k s tok
 {-# INLINE resourceToken #-}
 
 clientCred :: Token Client -> Cred Client
-clientCred (Token k s) = Cred k s Nothing
+clientCred (Token k s) = Cred k s
 
 temporaryCred :: Token Temporary -> Cred Client -> Cred Temporary
-temporaryCred tok (Cred k s _) = Cred k s (Just tok)
+temporaryCred tok (Cred         k s  ) = CredAndToken k s tok
+temporaryCred tok (CredAndToken k s _) = CredAndToken k s tok
 
 permanentCred :: Token Permanent -> Cred Client -> Cred Permanent
-permanentCred tok (Cred k s _) = Cred k s (Just tok)
+permanentCred tok (Cred         k s  ) = CredAndToken k s tok
+permanentCred tok (CredAndToken k s _) = CredAndToken k s tok
 
 -- | Produce a 'signingKey' from a set of credentials. This is a URL
 -- encoded string built from the client secret and the token
 -- secret. If no token secret exists then the blank string is used.
 signingKey :: Cred ty -> S.ByteString
-signingKey (Cred _ clSec tok) =
-  urlEncode True clSec <> "&" <> case tok of
-    Nothing               -> S.empty
-    Just (Token _ tokSec) -> urlEncode True tokSec
+signingKey (Cred _ clSec) = urlEncode True clSec <> "&" <> ""
+signingKey (CredAndToken _ clSec (Token _ tkSec)) =
+  pctEncode clSec <> "&" <> pctEncode tkSec

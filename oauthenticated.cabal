@@ -32,7 +32,14 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
+    Network.OAuth.Signing
+    Network.OAuth.Stateful
+    Network.OAuth.Types.Credentials
+    Network.OAuth.Types.Params
+    Network.OAuth
     Network.OAuth.MuLens
+  other-modules:
+    Network.OAuth.Util
   build-depends:       base                >= 4.6      && <  4.7
                      , aeson
                      , base64-bytestring

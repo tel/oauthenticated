@@ -153,6 +153,17 @@ freshPin gen = do
   where
     (n, gen') = withRandomBytes gen 8 S64.encode
 
+-- | Uses 'emptyPin' to create an empty set of params 'Oa'.
+emptyOa :: Cred ty -> Oa ty
+emptyOa creds = 
+  Oa { credentials = creds, workflow = Standard, pin = emptyPin }
+
+-- | Uses 'freshPin' to create a fresh, default set of params 'Oa'.
+freshOa :: CPRG gen => Cred ty -> gen -> IO (Oa ty, gen)
+freshOa creds gen = do
+  (pinx, gen') <- freshPin gen
+  return (Oa { credentials = creds, workflow = Standard, pin = pinx }, gen')
+
 -- | The 'Oa' parameters include all the OAuth information specific to a single
 -- request. They are not sufficient information by themselves to generate the
 -- entire OAuth request but instead must be augmented with 'Server' information.
