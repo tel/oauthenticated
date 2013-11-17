@@ -19,13 +19,20 @@
 
 module Network.OAuth.Types.Params where
 
+import           Control.Applicative
 import           Crypto.Random
 import qualified Data.ByteString                 as S
-import qualified Data.ByteString.Base16          as S16
+import qualified Data.ByteString.Base64          as S64
+import qualified Data.ByteString.Char8           as S8
 import           Data.Data
 import           Data.Time
+import           Data.Time.Clock.POSIX
+import           Network.HTTP.Client.Request     (getUri)
 import           Network.HTTP.Client.Types       (Request)
+import           Network.HTTP.Types              (urlEncode)
+import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.Types.Credentials
+import           Network.OAuth.Util
 
 -- Basics
 --------------------------------------------------------------------------------
@@ -55,10 +62,16 @@ data SignatureMethod = HmacSha1
                      | Plaintext
                      deriving ( Show, Eq, Ord, Data, Typeable )
 
+instance H.QueryValueLike SignatureMethod where
+  toQueryValue HmacSha1  = Just "HMAC-SHA1"
+  toQueryValue Plaintext = Just "PLAINTEXT"
+
 -- | OAuth is a family of request signature methods, indexed by
 -- 'Version's.
 data Version = OAuth1 deriving ( Show, Eq, Ord, Data, Typeable )
 
+instance H.QueryValueLike Version where
+  toQueryValue OAuth1 = Just "1.0"
 
 -- | When performing the second leg of the three-leg token request workflow,
 -- the user must pass the @oauth_verifier@ code back to the client. In order to
@@ -68,7 +81,25 @@ data Version = OAuth1 deriving ( Show, Eq, Ord, Data, Typeable )
 -- are returned to or the string @\"oob\"@ which indicates that the user is
 -- responsible for returning the @oauth_verifier@ to the client 'OutOfBand'.
 data Callback = OutOfBand | Callback Request
-  deriving ( Show, Typeable )
+  deriving ( Typeable )
+
+instance Show Callback where
+  show OutOfBand = "OutOfBand"
+  show (Callback req) = "Callback <" ++ show (getUri req) ++ ">"
+
+-- | Prints out in Epoch time format, a printed integer
+instance H.QueryValueLike Callback where
+  toQueryValue OutOfBand      = Just "oob"
+  toQueryValue (Callback req) = Just . pctEncode . S8.pack . show . getUri $ req
+
+-- | An Epoch time format timestamp.
+newtype Timestamp = Timestamp UTCTime deriving ( Show, Eq, Ord, Data, Typeable )
+
+-- | Prints out in Epoch time format, a printed integer
+instance H.QueryValueLike Timestamp where
+  toQueryValue (Timestamp u) =
+    let i = round (utcTimeToPOSIXSeconds u) :: Int
+    in Just $ S8.pack $ show i
 
 -- Server information
 --------------------------------------------------------------------------------
@@ -102,7 +133,7 @@ data Workflow = Standard
 -- | The 'OaPin' is a set of impure OAuth parameters which are generated for each
 -- request in order to ensure uniqueness and temporality.
 data OaPin =
-  OaPin { timestamp :: UTCTime
+  OaPin { timestamp :: Timestamp
         , nonce     :: S.ByteString
         } deriving ( Show, Eq, Ord, Data, Typeable )
 
@@ -110,7 +141,7 @@ data OaPin =
 -- transparent and thus has none of the necessary security features---it should
 -- /never/ be used in an actual transaction!
 emptyPin :: OaPin
-emptyPin = OaPin { timestamp = UTCTime (ModifiedJulianDay 0) 0
+emptyPin = OaPin { timestamp = Timestamp (UTCTime (ModifiedJulianDay 0) 0)
                  , nonce     = "\0\0\0\0\0"
                  }
 
@@ -118,10 +149,10 @@ emptyPin = OaPin { timestamp = UTCTime (ModifiedJulianDay 0) 0
 -- as dependent on the OAuth server settings it may expire.
 freshPin :: CPRG gen => gen -> IO (OaPin, gen)
 freshPin gen = do
-  t <- getCurrentTime
+  t <- Timestamp <$> getCurrentTime
   return (OaPin { timestamp = t, nonce = n }, gen')
   where
-    (n, gen') = withRandomBytes gen 8 S16.encode
+    (n, gen') = withRandomBytes gen 8 S64.encode
 
 -- | The 'Oa' parameters include all the OAuth information specific to a single
 -- request. They are not sufficient information by themselves to generate the
@@ -131,3 +162,4 @@ data Oa ty =
      , workflow    :: Workflow
      , pin         :: OaPin
      }
+  deriving ( Show, Typeable )

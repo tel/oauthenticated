@@ -34,18 +34,19 @@ library
   exposed-modules:
     Network.OAuth.MuLens
   build-depends:       base                >= 4.6      && <  4.7
-                     , base16-bytestring
                      , base64-bytestring
+                     , blaze-builder
                      , bytestring
                      , case-insensitive
+                     , contravariant
                      , crypto-random
                      , cryptohash
                      , http-client
                      , http-types
+                     , network
                      , mtl
-                     , transformers
                      , profunctors
-                     , contravariant
+                     , transformers
 
                      -- hide interface as possible (easy compat with thyme)
                      , time
