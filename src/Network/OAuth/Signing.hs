@@ -41,7 +41,7 @@ import           Network.URI
 import Crypto.Random
 
 -- | Sign a request with a fresh set of parameters.
-oauth :: CPRG gen => Cred Permanent -> Server -> C.Request -> gen -> IO (C.Request, gen)
+oauth :: CPRG gen => Cred ty -> Server -> C.Request -> gen -> IO (C.Request, gen)
 oauth creds sv req gen = do
   (pinx, gen') <- freshPin gen
   let oax = Oa { credentials = creds, workflow = Standard, pin = pinx }

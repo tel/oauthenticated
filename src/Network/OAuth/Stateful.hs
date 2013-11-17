@@ -11,23 +11,24 @@
 module Network.OAuth.Stateful where
 
 import           Control.Applicative
+import qualified Control.Exception               as E
 import           Control.Monad.State
-import qualified Control.Exception as E
 import           Crypto.Random
 import           Network.HTTP.Client.Manager     (Manager, ManagerSettings)
 import           Network.HTTP.Client.Manager     (closeManager, newManager)
 import           Network.HTTP.Client.Types       (Request)
 import           Network.OAuth.MuLens
 import qualified Network.OAuth.Signing           as S
-import           Network.OAuth.Types.Credentials (Cred, Permanent)
+import           Network.OAuth.Types.Credentials (Cred)
 import           Network.OAuth.Types.Params      (Server (..))
+import qualified Network.OAuth.Types.Params      as P
 
 -- | Very basic monad layer
 type OAuthT ty m a = StateT (OAuthConfig ty) m a
 
 -- | Build a new 'Manager' and 'CPRG' to run an isolated set of 'OAuth'
 -- requests.
-runOAuth :: MonadIO m => ManagerSettings -> Server -> Cred ty -> OAuthT ty IO a -> IO a
+runOAuth :: ManagerSettings -> Server -> Cred ty -> OAuthT ty IO a -> IO a
 runOAuth settings svr c mon = do
   fst <$> E.bracket (newManager settings) closeManager (\man -> runOAuthT' svr c man mon)
 
@@ -40,12 +41,29 @@ runOAuthT' srv c m mon = runStateT mon =<< conf where
     pool <- liftIO createEntropyPool
     return $ OAuthConfig m (cprgCreate pool) srv c
 
--- | Sign a request.
-oauth :: MonadIO m => Request -> OAuthT Permanent m Request
+-- | Generate default OAuth parameters and use them to sign a request.
+oauth :: MonadIO m => Request -> OAuthT ty m Request
 oauth req = do
+  oax <- newParams
+  sign oax req
+
+withGen :: MonadIO m => (SystemRNG -> m (a, SystemRNG)) -> OAuthT ty m a
+withGen m = zoom crng $ StateT m
+
+newParams :: MonadIO m => OAuthT ty m (P.Oa ty)
+newParams = do
+  px <- withGen (liftIO . P.freshPin)
   c <- use credentials
+  return P.Oa { P.credentials = c
+              , P.workflow    = P.Standard
+              , P.pin         = px
+              }
+
+-- | Sign a request.
+sign :: Monad m => P.Oa ty -> Request -> OAuthT ty m Request
+sign oax req = do
   s <- use server
-  zoom crng $ StateT (liftIO . S.oauth c s req)
+  return (S.sign oax s req)
 
 data OAuthConfig ty =
   OAuthConfig {-# UNPACK #-} !Manager
