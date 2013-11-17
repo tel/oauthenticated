@@ -31,7 +31,7 @@ module Network.OAuth (
   Permanent, Temporary, Client,
 
   -- And are composed of both 'Token's and 'Cred'entials.
-  Cred (..), Token (..),
+  Cred, Token (..),
   clientCred, temporaryCred, permanentCred,
 
   -- ** Access lenses
@@ -39,11 +39,12 @@ module Network.OAuth (
   ) where
 
 import           Network.OAuth.Stateful
-import           Network.OAuth.Types.Credentials (Client, Cred (..), Permanent,
-						  clientCred, temporaryCred, permanentCred,
-                                                  Temporary, Token (..), clientToken,
-                                                  key, resourceToken, secret)
+import           Network.OAuth.Types.Credentials (Client, Cred, Permanent,
+                                                  Temporary, Token (..),
+                                                  clientCred, clientToken, key,
+                                                  permanentCred, resourceToken,
+                                                  secret, temporaryCred)
 import           Network.OAuth.Types.Params      (ParameterMethod (..),
-                                                  Server (..), defaultServer,
+                                                  Server (..),
                                                   SignatureMethod (..),
-                                                  Version (..))
+                                                  Version (..), defaultServer)

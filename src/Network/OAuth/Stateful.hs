@@ -69,7 +69,7 @@ data OAuthConfig ty =
   OAuthConfig {-# UNPACK #-} !Manager
               {-# UNPACK #-} !SystemRNG
 	      {-# UNPACK #-} !Server
-	      {-# UNPACK #-} !(Cred ty)
+	      !(Cred ty)
 
 manager :: Lens (OAuthConfig ty) (OAuthConfig ty) Manager Manager
 manager inj (OAuthConfig m rng sv c) = (\m' -> OAuthConfig m' rng sv c) <$> inj m

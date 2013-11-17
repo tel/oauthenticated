@@ -15,7 +15,25 @@
 -- sent, 'Server' parameters, and a full 'Oa' we append a set of parameters to
 -- the 'C.Request' which turns it into a signed OAuth request.
 
-module Network.OAuth.Signing where
+module Network.OAuth.Signing (
+
+  -- * Primary interface
+  
+  -- | The 'oauth' and 'sign' commands can be used as low level signing
+  -- primitives, and they are indeed used to build the "Network.OAuth.Stateful"
+  -- interface exported by default.
+  
+  oauth, sign,
+
+  -- * Low-level interface
+  
+  -- | The low-level interface is used to build 'oauth' and 'sign' and can be
+  -- useful for testing.
+
+  makeSignature, augmentRequest, canonicalBaseString, canonicalParams,
+  oauthParams, canonicalUri, bodyParams, queryParams
+
+  ) where
 
 import qualified Blaze.ByteString.Builder        as Blz
 import           Control.Applicative
@@ -122,7 +140,7 @@ oauthParams (Oa {..}) (Server {..}) =
     [ "oauth_version"          -: oAuthVersion
     , "oauth_consumer_key"     -: (credentials ^. clientToken . key)
     , "oauth_signature_method" -: signatureMethod
-    , "oauth_token"            -: (credentials ^. resourceToken & getTokenDefault)
+    , "oauth_token"            -: (getResourceTokenDef credentials ^. key)
     , "oauth_timestamp"        -: timestamp
     , "oauth_nonce"            -: nonce
     ] ++ workflowParams workflow
