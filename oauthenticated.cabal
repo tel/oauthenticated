@@ -46,7 +46,6 @@ library
                      , http-types
                      , network
                      , mtl
-                     , profunctors
                      , transformers
 
                      -- hide interface as possible (easy compat with thyme)

@@ -12,8 +12,10 @@ module Network.OAuth.Stateful where
 
 import           Control.Applicative
 import           Control.Monad.State
+import qualified Control.Exception as E
 import           Crypto.Random
-import           Network.HTTP.Client.Manager     (Manager)
+import           Network.HTTP.Client.Manager     (Manager, ManagerSettings)
+import           Network.HTTP.Client.Manager     (closeManager, newManager)
 import           Network.HTTP.Client.Types       (Request)
 import           Network.OAuth.MuLens
 import qualified Network.OAuth.Signing           as S
@@ -22,6 +24,21 @@ import           Network.OAuth.Types.Params      (Server (..))
 
 -- | Very basic monad layer
 type OAuthT ty m a = StateT (OAuthConfig ty) m a
+
+-- | Build a new 'Manager' and 'CPRG' to run an isolated set of 'OAuth'
+-- requests.
+runOAuth :: MonadIO m => ManagerSettings -> Server -> Cred ty -> OAuthT ty IO a -> IO a
+runOAuth settings svr c mon = do
+  fst <$> E.bracket (newManager settings) closeManager (\man -> runOAuthT' svr c man mon)
+
+-- | Run an 'OAuthT' monad while continuing to thread the 'Manager'. This can
+-- be more efficient if 'OAuth' requests are only a fraction of the total
+-- request volume.
+runOAuthT' :: MonadIO m => Server -> Cred ty -> Manager -> OAuthT ty m a -> m (a, OAuthConfig ty)
+runOAuthT' srv c m mon = runStateT mon =<< conf where
+  conf = do
+    pool <- liftIO createEntropyPool
+    return $ OAuthConfig m (cprgCreate pool) srv c
 
 -- | Sign a request.
 oauth :: MonadIO m => Request -> OAuthT Permanent m Request
