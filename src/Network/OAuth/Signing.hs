@@ -125,9 +125,6 @@ oauthParams (Oa {..}) (Server {..}) =
     infix 8 -:
     s -: v = (s, H.toQueryValue v)
 
-    getTokenDefault Nothing    = ""
-    getTokenDefault (Just tok) = tok ^. key
-
     workflowParams Standard = []
     workflowParams (TemporaryTokenRequest callback) =
       [ "oauth_callback" -: callback ]

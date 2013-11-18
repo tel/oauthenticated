@@ -49,14 +49,13 @@ library
                      , contravariant
                      , crypto-random
                      , cryptohash
+                     , exceptions
                      , http-client
                      , http-types
-                     , network
                      , mtl
-                     , transformers
-
-                     -- hide interface as possible (easy compat with thyme)
+                     , network
                      , time
+                     , transformers
 
   hs-source-dirs:      src         
   ghc-options:         -Wall

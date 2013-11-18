@@ -1,3 +1,5 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 -- |
 -- Module      : Network.OAuth.Stateful
 -- Copyright   : (c) Joseph Abrahamson 2013
@@ -8,14 +10,26 @@
 -- Portability : non-portable
 --
 
-module Network.OAuth.Stateful where
+module Network.OAuth.Stateful (
+  -- * An OAuth Monad Transformer
+  OAuthT, runOAuthT, runOAuthT',
+
+  -- * Standard operations
+
+  -- | These operations are similar to those exposed by
+  -- "Network.OAuth.Types.Params" or "Network.OAuth.Signing" but use the
+  -- OAuth monad state instead of needing manual threading.
+  oauth, sign, newParams,
+
+  -- * OAuth State
+  withGen, withManager
+
+  ) where
 
 import           Control.Applicative
-import qualified Control.Exception               as E
+import           Control.Monad.Catch
 import           Control.Monad.State
 import           Crypto.Random
-import           Network.HTTP.Client.Manager     (Manager, ManagerSettings)
-import           Network.HTTP.Client.Manager     (closeManager, newManager)
 import           Network.HTTP.Client.Types       (Request)
 import           Network.OAuth.MuLens
 import qualified Network.OAuth.Signing           as S
@@ -23,53 +37,59 @@ import           Network.OAuth.Types.Credentials (Cred)
 import           Network.OAuth.Types.Params      (Server (..))
 import qualified Network.OAuth.Types.Params      as P
 
--- | Very basic monad layer
-type OAuthT ty m a = StateT (OAuthConfig ty) m a
+import Network.HTTP.Client.Manager (Manager, ManagerSettings, closeManager,
+                                    defaultManagerSettings, newManager)
+-- | A simple monad suitable for basic OAuth requests.
+newtype OAuthT ty m a =
+  OAuthT { unOAuthT :: StateT (OAuthConfig ty) m a }
+  deriving ( Functor, Applicative, Monad, MonadIO, MonadTrans )
 
--- | Build a new 'Manager' and 'CPRG' to run an isolated set of 'OAuth'
--- requests.
-runOAuth :: ManagerSettings -> Server -> Cred ty -> OAuthT ty IO a -> IO a
-runOAuth settings svr c mon = do
-  fst <$> E.bracket (newManager settings) closeManager (\man -> runOAuthT' svr c man mon)
+runOAuthT :: (MonadIO m, MonadCatch m) => Cred ty -> Server -> OAuthT ty m a -> m a
+runOAuthT = runOAuthT' defaultManagerSettings
 
--- | Run an 'OAuthT' monad while continuing to thread the 'Manager'. This can
--- be more efficient if 'OAuth' requests are only a fraction of the total
--- request volume.
-runOAuthT' :: MonadIO m => Server -> Cred ty -> Manager -> OAuthT ty m a -> m (a, OAuthConfig ty)
-runOAuthT' srv c m mon = runStateT mon =<< conf where
-  conf = do
-    pool <- liftIO createEntropyPool
-    return $ OAuthConfig m (cprgCreate pool) srv c
+runOAuthT' :: (MonadIO m, MonadCatch m) => ManagerSettings -> Cred ty -> Server -> OAuthT ty m a -> m a
+runOAuthT' settings creds srv m = do
+  pool <- liftIO createEntropyPool
+  bracket (liftIO $ newManager settings) (liftIO . closeManager) $ \man ->
+    let conf = OAuthConfig man (cprgCreate pool) srv creds
+    in  evalStateT (unOAuthT m) conf
 
--- | Generate default OAuth parameters and use them to sign a request.
+-- | Generate default OAuth parameters and use them to sign a request. This
+-- is the simplest OAuth method.
 oauth :: MonadIO m => Request -> OAuthT ty m Request
-oauth req = do
-  oax <- newParams
-  sign oax req
+oauth req = newParams >>= flip sign req
 
-withGen :: MonadIO m => (SystemRNG -> m (a, SystemRNG)) -> OAuthT ty m a
-withGen m = zoom crng $ StateT m
+-- | 'OAuthT' retains a cryptographic random generator state. 
+withGen :: Monad m => (SystemRNG -> m (a, SystemRNG)) -> OAuthT ty m a
+withGen = OAuthT . zoom crng . StateT
 
+-- | 'OAuthT' retains a "Network.HTTP.Client" 'Manager'. The 'Manager' is
+-- created at the beginning of an 'OAuthT' thread and destroyed at the end,
+-- so it's efficient to pipeline many OAuth requests together.
+withManager :: Monad m => (Manager -> m a) -> OAuthT ty m a
+withManager f = OAuthT $ zoom manager (get >>= lift . f)
+
+-- | Create a fresh set of parameters.
 newParams :: MonadIO m => OAuthT ty m (P.Oa ty)
 newParams = do
   px <- withGen (liftIO . P.freshPin)
-  c <- use credentials
+  c  <- OAuthT $ use credentials
   return P.Oa { P.credentials = c
               , P.workflow    = P.Standard
               , P.pin         = px
               }
 
--- | Sign a request.
+-- | Sign a request using a set of parameters, 'P.Oa'.
 sign :: Monad m => P.Oa ty -> Request -> OAuthT ty m Request
 sign oax req = do
-  s <- use server
+  s <- OAuthT $ use server
   return (S.sign oax s req)
 
 data OAuthConfig ty =
   OAuthConfig {-# UNPACK #-} !Manager
               {-# UNPACK #-} !SystemRNG
-	      {-# UNPACK #-} !Server
-	      !(Cred ty)
+               {-# UNPACK #-} !Server
+              !(Cred ty)
 
 manager :: Lens (OAuthConfig ty) (OAuthConfig ty) Manager Manager
 manager inj (OAuthConfig m rng sv c) = (\m' -> OAuthConfig m' rng sv c) <$> inj m
