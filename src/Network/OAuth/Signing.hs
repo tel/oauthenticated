@@ -77,9 +77,20 @@ makeSignature :: SignatureMethod -> S.ByteString -> S.ByteString -> S.ByteString
 makeSignature HmacSha1  sigKey payload = S64.encode (hmac hash 64 sigKey payload)
 makeSignature Plaintext sigKey _       = sigKey
 
--- | Replaces whatever component of the 'C.Request' is specified by
+-- | Augments whatever component of the 'C.Request' is specified by
 -- 'ParameterMethod' with one built from the apropriate OAuth parameters
 -- (passed as a 'H.Query').
+--
+-- Currently this actually /replaces/ the @Authorization@ header if one
+-- exists. This may be a bad idea if the @realm@ parameter is pre-set,
+-- perhaps.
+--
+-- TODO: Parse @Authorization@ header and augment it.
+--
+-- Currently this actually /replaces/ the entity body if one
+-- exists. This is definitely just me being lazy.
+--
+-- TODO: Try to parse entity body and augment it.
 augmentRequest :: ParameterMethod -> H.Query -> C.Request -> C.Request
 augmentRequest AuthorizationHeader q req =
   let replaceHeader :: H.HeaderName -> S.ByteString -> H.RequestHeaders -> H.RequestHeaders
@@ -91,7 +102,8 @@ augmentRequest AuthorizationHeader q req =
       mkPair (k, v) = k <> "=\"" <> fromMaybe "" v <> "\""
   in req { C.requestHeaders = replaceHeader H.hAuthorization authHeader (C.requestHeaders req) }
 augmentRequest QueryString q req =
-  req { C.queryString = H.renderQuery True q }
+  let q0 = H.parseQuery (C.queryString req)
+  in  req { C.queryString = H.renderQuery True (q ++ q0) }
 augmentRequest RequestEntityBody q req =
   let fixQ = mapMaybe (\(a, mayB) -> (a,) <$> mayB) q
   in  C.urlEncodedBody fixQ req
