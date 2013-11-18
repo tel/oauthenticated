@@ -55,17 +55,17 @@ module Network.OAuth (
   ) where
 
 import           Control.Applicative
-import           Control.Monad.Catch
 import           Control.Monad.Trans
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Maybe                      (mapMaybe)
+import           Pipes.Safe                      (throwM, MonadCatch)
 import           Network.HTTP.Client             (httpLbs)
 import           Network.HTTP.Client.Request     (parseUrl, urlEncodedBody)
 import           Network.HTTP.Client.Response    (Response)
 import           Network.HTTP.Client.Types       (HttpException, method,
                                                   queryString)
-import           Network.HTTP.Types              (Query, QueryItem
-                                                 , methodGet, renderQuery)
+import           Network.HTTP.Types              (Query, QueryItem, methodGet,
+                                                  renderQuery)
 import           Network.OAuth.Stateful
 import           Network.OAuth.Types.Credentials (Client, Cred, Permanent,
                                                   Temporary, Token (..),
@@ -86,8 +86,8 @@ data Params = QueryParams Query
 -- | Send an OAuth GET request to a particular URI. Throws an exception if
 -- the URI cannot be parsed or if errors occur during the request.
 simpleOAuth
-  :: (MonadCatch m, MonadIO m) =>
-  String -> Params -> OAuthT Permanent m (Response SL.ByteString)
+  :: (MonadIO m, MonadCatch m) =>
+  String -> Params -> OAuthT ty m (Response SL.ByteString)
 simpleOAuth url ps = case parseUrl url of
   Left err -> lift $ throwM (err :: HttpException)
   Right rq -> do

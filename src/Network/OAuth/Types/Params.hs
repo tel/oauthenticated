@@ -94,6 +94,10 @@ instance H.QueryValueLike Callback where
 -- | An Epoch time format timestamp.
 newtype Timestamp = Timestamp UTCTime deriving ( Show, Eq, Ord, Data, Typeable )
 
+-- | Create a 'Timestamp' deterministically from a POSIX Epoch Time.
+timestampFromSeconds :: Integer -> Timestamp
+timestampFromSeconds = Timestamp . posixSecondsToUTCTime . fromIntegral
+
 -- | Prints out in Epoch time format, a printed integer
 instance H.QueryValueLike Timestamp where
   toQueryValue (Timestamp u) =

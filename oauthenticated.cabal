@@ -49,9 +49,10 @@ library
                      , contravariant
                      , crypto-random
                      , cryptohash
-                     , exceptions
                      , http-client
+                     , http-client-tls
                      , http-types
+                     , pipes-safe
                      , mtl
                      , network
                      , time

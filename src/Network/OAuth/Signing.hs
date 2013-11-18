@@ -99,9 +99,9 @@ augmentRequest RequestEntityBody q req =
 canonicalBaseString :: Oa ty -> Server -> C.Request -> S.ByteString
 canonicalBaseString oax server req =
   S8.intercalate "&" [ S8.map toUpper (C.method req)
-		     , canonicalUri req
-		     , canonicalParams oax server req
-		     ]
+            		     , canonicalUri req
+                     , canonicalParams oax server req
+                     ]
 
 canonicalParams :: Oa ty -> Server -> C.Request -> S.ByteString
 canonicalParams oax server req =
@@ -143,7 +143,7 @@ oauthParams (Oa {..}) (Server {..}) =
 
 canonicalUri :: C.Request -> S.ByteString
 canonicalUri req =
-  S8.pack $ uriScheme <> "//" <> fauthority uriAuthority <> uriPath
+  pctEncode $ S8.pack $ uriScheme <> "//" <> fauthority uriAuthority <> uriPath
   where
     URI {..} = C.getUri req
     fauthority Nothing               = ""
