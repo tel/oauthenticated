@@ -9,9 +9,23 @@
 -- Stability   : experimental
 -- Portability : non-portable
 --
+-- "Network.OAuth" provides simple OAuth signed requests atop
+-- "Network.HTTP.Client". This module exports a simplified interface atop
+-- the monadic interface defined in "Network.OAuth.Stateful".
+--
+-- If more control is needed, the low-level functions for creating, customizing,
+-- and managing OAuth 'Cred'entials, 'Token's, and parameter sets ('Oa')
+-- are using them to sign 'Network.HTTP.Client.Types.Request's are
+-- available in "Network.OAuth.Types.Params",
+-- "Network.OAuth.Types.Credentials", and "Network.OAuth.Signing".
 
 module Network.OAuth (
-  simpleOAuth, oauth,
+
+  -- * The basic monadic API
+  oauth,
+
+  -- * Simplified requests layer
+  simpleOAuth, Params (..), Query, QueryItem,
 
   -- * OAuth Monad
   --
@@ -40,8 +54,8 @@ module Network.OAuth (
   key, secret, clientToken, resourceToken
   ) where
 
+import           Control.Applicative
 import           Control.Monad.Catch
-import Control.Applicative
 import           Control.Monad.Trans
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Maybe                      (mapMaybe)
@@ -50,8 +64,8 @@ import           Network.HTTP.Client.Request     (parseUrl, urlEncodedBody)
 import           Network.HTTP.Client.Response    (Response)
 import           Network.HTTP.Client.Types       (HttpException, method,
                                                   queryString)
-import           Network.HTTP.Types              (Query, methodGet,
-                                                  renderQuery)
+import           Network.HTTP.Types              (Query, QueryItem
+                                                 , methodGet, renderQuery)
 import           Network.OAuth.Stateful
 import           Network.OAuth.Types.Credentials (Client, Cred, Permanent,
                                                   Temporary, Token (..),
@@ -63,6 +77,9 @@ import           Network.OAuth.Types.Params      (ParameterMethod (..),
                                                   SignatureMethod (..),
                                                   Version (..), defaultServer)
 
+-- | 'Params' quickly set the parameterization of a 'Request', either
+-- a @GET@ request with a query string or a @POST@ request with
+-- a @www-form-urlencoded@ body.
 data Params = QueryParams Query
             | BodyParams  Query
 
