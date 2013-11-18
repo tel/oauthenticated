@@ -62,7 +62,7 @@ import Crypto.Random
 oauth :: CPRG gen => Cred ty -> Server -> C.Request -> gen -> IO (C.Request, gen)
 oauth creds sv req gen = do
   (oax, gen') <- freshOa creds gen
-  return $ (sign oax sv req, gen')
+  return (sign oax sv req, gen')
 
 -- | Sign a request given generated parameters
 sign :: Oa ty -> Server -> C.Request -> C.Request
