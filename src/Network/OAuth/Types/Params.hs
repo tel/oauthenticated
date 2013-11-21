@@ -65,12 +65,36 @@ instance H.QueryValueLike SignatureMethod where
   toQueryValue HmacSha1  = Just "HMAC-SHA1"
   toQueryValue Plaintext = Just "PLAINTEXT"
 
--- | OAuth is a family of request signature methods, indexed by
--- 'Version's.
-data Version = OAuth1 deriving ( Show, Eq, Ord, Data, Typeable )
+-- | OAuth has progressed through several versions since its inception. In
+-- particular, there are two community editions \"OAuth Core 1.0\" (2007)
+-- <<http://oauth.net/core/1.0>> and \"OAuth Core 1.0a\" (2009)
+-- <<http://oauth.net/core/1.0a>> along with the IETF Official version RFC
+-- 5849 (2010) <<http://tools.ietf.org/html/rfc5849>> which is confusingly
+-- named "OAuth 1.0".
+--
+-- /Servers which only implement the obsoleted community edition \"OAuth
+-- Core 1.0\" are susceptible to a session fixation attack./
+--
+-- If at all possible, choose the RFC 5849 version (the 'OAuth1' value) as
+-- it is the modern standard. Some servers may only be compliant with an
+-- earlier OAuth version---this should be tested against each server, in
+-- particular the protocols defined in "Network.OAuth.ThreeLegged".
+data Version = OAuthCommunity1 
+             -- ^ OAuth Core 1.0 Community Edition
+             -- <<http://oauth.net/core/1.0>>
+             | OAuthCommunity1a
+             -- ^ OAuth Core 1.0 Community Edition, Revision
+             -- A <<http://oauth.net/core/1.0a>>
+             | OAuth1
+             -- ^ RFC 5849 <<http://tools.ietf.org/html/rfc5849>>
+  deriving ( Show, Eq, Ord, Data, Typeable )
 
+-- | All three OAuth 1.0 versions confusingly report the same version
+-- number.
 instance H.QueryValueLike Version where
-  toQueryValue OAuth1 = Just "1.0"
+  toQueryValue OAuthCommunity1  = Just "1.0"
+  toQueryValue OAuthCommunity1a = Just "1.0"
+  toQueryValue OAuth1           = Just "1.0"
 
 -- | When performing the second leg of the three-leg token request workflow,
 -- the user must pass the @oauth_verifier@ code back to the client. In order to
