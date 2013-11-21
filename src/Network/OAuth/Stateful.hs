@@ -40,8 +40,6 @@ import           Network.OAuth.Types.Params      (Server (..))
 import qualified Network.OAuth.Types.Params      as P
 import           Pipes.Safe
 
-import Debug.Trace
-
 import Network.HTTP.Client.Manager (Manager, ManagerSettings, closeManager,
                                     defaultManagerSettings, newManager)
 -- | A simple monad suitable for basic OAuth requests.
@@ -60,7 +58,7 @@ runOAuthT = runOAuthT' defaultManagerSettings
 runOAuthT' :: (MonadIO m, MonadCatch m) => ManagerSettings -> Cred ty -> Server -> OAuthT ty m a -> m a
 runOAuthT' settings creds srv m = runSafeT $ do
   pool <- liftIO createEntropyPool
-  bracket (liftIO $ newManager settings) (\_ -> return ()) $ \man ->
+  bracket (liftIO $ newManager settings) (liftIO . closeManager) $ \man ->
     let conf = OAuthConfig man (cprgCreate pool) srv creds
     in  evalStateT (unOAuthT m) conf
 
