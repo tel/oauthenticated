@@ -4,22 +4,28 @@ synopsis:            Simple OAuth client code built atop http-conduit
 
 description:         
 
-  OAuth is a popular protocol allowing servers to offer resources
-  owned by some user to a series of authorized clients securely. For
-  instance, OAuth lets Twitter provide access to a user's private
-  tweets to the Twitter client registered on their phone.
+  OAuth is a popular protocol allowing servers to offer resources owned by some
+  user to a series of authorized clients securely. For instance, OAuth lets
+  Twitter provide access to a user's private tweets to the Twitter client
+  registered on their phone.
   
-  @oauthenticated@ is a Haskell library implementing OAuth protocols
-  atop the popular @http-conduit@ HTTP client library. The goal is to
-  provide a general framework for signing
-  'Network.HTTP.Conduit.Request's according to server parameters, a
-  simple method for executing the common 3-arm OAuth token negotiation
-  protocol, and a simplified API for accessing OAuth-protected
-  resources.
+  @oauthenticated@ is a Haskell library implementing OAuth protocols atop the
+  minimalistic @http-client@ HTTP client library extracted from @http-conduit@.
+  It offers a simplified main API in "Network.OAuth" which provides simplistic,
+  authenticated @GET@ and @POST@ requests atop OAuth using a trivial state
+  monad. It also offers a lower-level API in "Network.OAuth.Signing" which can
+  be used to sign arbitrary requests while intercepting and modifying the OAuth
+  parameter set.  
 
-  Currently @oauthenticated@ only supports OAuth 1.0 and is in
-  alpha. Further testing is needed before trustworthy use can be
-  established. Further, OAuth 2.0 support is planned.
+  There's also an implementation of OAuth's three-legged credential acquisition
+  protocol built atop the "Network.OAuth" API. This can be handled in both
+  conformant and old-style modes: conformant will reject server responses which
+  are not conformant with RFC 5849 (which builds atop community version OAuth
+  1.0a) while old-style better allows for less-than-compliant servers.
+
+  Currently @oauthenticated@ only supports OAuth 1.0 and is in alpha. OAuth 2.0
+  support is a potential goal, but it's unclear if it can be transparently
+  supported at a similar level of abstraction.
 
 license:             MIT
 license-file:        LICENSE
