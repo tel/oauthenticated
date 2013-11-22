@@ -55,10 +55,10 @@ module Network.OAuth (
   ) where
 
 import           Control.Applicative
+import           Control.Monad.Catch
 import           Control.Monad.Trans
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Maybe                      (mapMaybe)
-import           Pipes.Safe                      (throwM, MonadCatch)
 import           Network.HTTP.Client             (httpLbs)
 import           Network.HTTP.Client.Request     (parseUrl, urlEncodedBody)
 import           Network.HTTP.Client.Response    (Response)

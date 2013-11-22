@@ -146,6 +146,11 @@ defaultServer = Server AuthorizationHeader HmacSha1 OAuth1
 -- Params
 --------------------------------------------------------------------------------
 
+-- | A 'Verifier' is produced when a user authorizes a set of 'Temporary'
+-- 'Cred's. Using the 'Verifier' allows the client to request 'Permanent'
+-- 'Cred's.
+type Verifier = S.ByteString
+
 -- | Some special OAuth requests use extra @oauth_*@ parameters. For example,
 -- when requesting a temporary credential, it's necessary that a
 -- @oauth_callback@ parameter be specified. 'WorkflowParams' allows these extra
