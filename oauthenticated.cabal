@@ -21,7 +21,8 @@ description:
   protocol built atop the "Network.OAuth" API. This can be handled in both
   conformant and old-style modes: conformant will reject server responses which
   are not conformant with RFC 5849 (which builds atop community version OAuth
-  1.0a) while old-style better allows for less-than-compliant servers.
+  1.0a) while old-style better allows for less-than-compliant servers. See
+  'Network.OAuth.Types.Params.Version' for more details.
   .
   Currently @oauthenticated@ only supports OAuth 1.0 and is in alpha. OAuth 2.0
   support is a potential goal, but it's unclear if it can be transparently
