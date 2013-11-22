@@ -73,7 +73,8 @@ requestTemporaryTokenRaw (ThreeLegged {..}) = do
 
 -- | Returns 'Nothing' if the response could not be decoded as a 'Token'.
 -- Importantly, in RFC 5849 compliant modes this requires that the token
--- response includes @callback_confirmed=true@.
+-- response includes @callback_confirmed=true@. See also
+-- 'requestTemporaryTokenRaw'.
 requestTemporaryToken :: MonadIO m => ThreeLegged -> OAuthT Client m (Maybe (Token Temporary))
 requestTemporaryToken tl = do
   raw <- requestTemporaryTokenRaw tl
@@ -94,6 +95,9 @@ buildAuthorizationUrl (ThreeLegged {..}) = do
     queryString = renderQuery True [ ("oauth_token", Just (c ^. resourceToken . key)) ]
   }
 
+-- | Request a 'Permanent 'Token' based on the parameters of
+-- a 'ThreeLegged' protocol. This returns the raw response which should be
+-- encoded as @www-form-urlencoded@.
 requestPermanentTokenRaw :: MonadIO m => ThreeLegged -> Verifier -> OAuthT Temporary m SL.ByteString
 requestPermanentTokenRaw (ThreeLegged {..}) verifier = do
   oax  <- newParams
@@ -101,6 +105,8 @@ requestPermanentTokenRaw (ThreeLegged {..}) verifier = do
   resp <- withManager (liftIO . httpLbs req)
   return $ responseBody resp
 
+-- | Returns 'Nothing' if the response could not be decoded as a 'Token'.
+-- See also 'requestPermanentTokenRaw'.
 requestPermanentToken :: MonadIO m => ThreeLegged -> Verifier -> OAuthT Temporary m (Maybe (Token Permanent))
 requestPermanentToken tl verifier = do
   raw <- requestPermanentTokenRaw tl verifier
