@@ -61,7 +61,6 @@ library
                      , crypto-random
                      , cryptohash
                      , http-client
-                     , http-client-tls
                      , http-types
                      , exceptions
                      , mtl

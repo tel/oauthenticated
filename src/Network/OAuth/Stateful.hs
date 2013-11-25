@@ -25,7 +25,7 @@ module Network.OAuth.Stateful
   oauth, sign, newParams,
 
   -- * OAuth State
-  withGen, withManager, withCred, getServer, getCredentials, createCredential
+  withGen, withManager, withCred, getServer, getCredentials, 
 
   )
   where
@@ -115,12 +115,6 @@ getServer = OAuthT (use server)
 
 getCredentials :: Monad m => OAuthT ty m (Cred ty)
 getCredentials = OAuthT (use credentials)
-
-createCredential :: Monad m => Token ty' -> OAuthT ty m (Cred ty')
-createCredential tok = do
-  cc <- getCredentials
-  let clientTok = view clientToken cc
-  return $ set resourceToken (clientCred clientTok) tok
 
 manager :: Lens (OAuthConfig ty) (OAuthConfig ty) Manager Manager
 manager inj (OAuthConfig m rng sv c) = (\m' -> OAuthConfig m' rng sv c) <$> inj m
