@@ -1,4 +1,4 @@
-# OAuthenticated
+# Oh! Authenticated!
 
   OAuth is a popular protocol allowing servers to offer resources
   owned by some user to a series of authorized clients securely. For

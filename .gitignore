@@ -3,3 +3,4 @@ dist
 vendor
 cabal.sandbox.config
 src/Test.hs
+src-old
