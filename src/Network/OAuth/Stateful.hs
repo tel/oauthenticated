@@ -25,19 +25,20 @@ module Network.OAuth.Stateful
   oauth, sign, newParams,
 
   -- * OAuth State
-  withGen, withManager, withCred, getServer, getCredentials
+  withGen, withManager, withCred, getServer, getCredentials, createCredential
 
   )
   where
 
 import           Control.Applicative
-import           Control.Monad.State
 import           Control.Monad.Catch
+import           Control.Monad.State
 import           Crypto.Random
 import           Network.HTTP.Client.Types       (Request)
 import           Network.OAuth.MuLens
 import qualified Network.OAuth.Signing           as S
-import           Network.OAuth.Types.Credentials (Cred)
+import           Network.OAuth.Types.Credentials (Cred, Token, clientCred,
+                                                  clientToken, resourceToken)
 import           Network.OAuth.Types.Params      (Server (..))
 import qualified Network.OAuth.Types.Params      as P
 
@@ -74,7 +75,7 @@ oauth req = newParams >>= flip sign req
 
 -- | 'OAuthT' retains a cryptographic random generator state.
 withGen :: Monad m => (SystemRNG -> m (a, SystemRNG)) -> OAuthT ty m a
-withGen = OAuthT . zoom crng . StateT 
+withGen = OAuthT . zoom crng . StateT
 
 -- | 'OAuthT' retains a "Network.HTTP.Client" 'Manager'. The 'Manager' is
 -- created at the beginning of an 'OAuthT' thread and destroyed at the end,
@@ -114,6 +115,12 @@ getServer = OAuthT (use server)
 
 getCredentials :: Monad m => OAuthT ty m (Cred ty)
 getCredentials = OAuthT (use credentials)
+
+createCredential :: Monad m => Token ty' -> OAuthT ty m (Cred ty')
+createCredential tok = do
+  cc <- getCredentials
+  let clientTok = view clientToken cc
+  return $ set resourceToken (clientCred clientTok) tok
 
 manager :: Lens (OAuthConfig ty) (OAuthConfig ty) Manager Manager
 manager inj (OAuthConfig m rng sv c) = (\m' -> OAuthConfig m' rng sv c) <$> inj m

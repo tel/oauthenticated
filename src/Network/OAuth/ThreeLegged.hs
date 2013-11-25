@@ -14,14 +14,29 @@
 -- The \"Three-legged OAuth\" protocol implementing RFC 5849's
 -- /Redirection-Based Authorization/.
 
-module Network.OAuth.ThreeLegged where
+module Network.OAuth.ThreeLegged (
+  -- * Configuration types
+  ThreeLegged (..), parseThreeLegged, Callback (..),
 
+  -- * Actions
+  requestTemporaryToken, buildAuthorizationUrl, requestPermanentToken,
+
+  -- ** Raw forms
+  requestTemporaryTokenRaw, requestPermanentTokenRaw,
+
+  -- * Example system
+  requestTokenProtocol
+  ) where
+
+import           Control.Applicative
 import           Control.Monad.Trans
+import           Control.Monad.Trans.Maybe
 import qualified Data.ByteString.Lazy            as SL
+import qualified Data.ByteString                 as S
 import           Data.Data
 import           Network.HTTP.Client             (httpLbs)
-import           Network.HTTP.Client.Request     (getUri)
-import           Network.HTTP.Client.Types       (Request (..), Response (..))
+import           Network.HTTP.Client.Request     (getUri,parseUrl)
+import           Network.HTTP.Client.Types       (Request (..), Response (..), HttpException)
 import           Network.HTTP.Types              (renderQuery)
 import           Network.OAuth
 import           Network.OAuth.MuLens
@@ -60,6 +75,10 @@ data ThreeLegged =
               }
     deriving ( Show, Typeable )
 
+-- | Convenience method for creating a 'ThreeLegged' configuration from
+-- a trio of URLs and a 'Callback'.
+parseThreeLegged :: String -> String -> String -> Callback -> Either HttpException ThreeLegged
+parseThreeLegged a b c d = ThreeLegged <$> parseUrl a <*> parseUrl b <*> parseUrl c <*> pure d
 
 -- | Request a 'Temporary' 'Token' based on the parameters of
 -- a 'ThreeLegged' protocol. This returns the raw response which should be
@@ -111,3 +130,18 @@ requestPermanentToken :: MonadIO m => ThreeLegged -> Verifier -> OAuthT Temporar
 requestPermanentToken tl verifier = do
   raw <- requestPermanentTokenRaw tl verifier
   return $ fmap snd $ fromUrlEncoded $ SL.toStrict raw
+
+-- | Performs an interactive token request over stdin assuming that the
+-- verifier code is acquired out-of-band.
+requestTokenProtocol :: MonadIO m => ThreeLegged -> OAuthT Client m (Maybe (Token Permanent))
+requestTokenProtocol threeLegged = runMaybeT $ do
+  cCred <- lift getCredentials
+  tok <- MaybeT (requestTemporaryToken threeLegged)
+  MaybeT $ withCred (temporaryCred tok cCred) $ do
+    url <- buildAuthorizationUrl threeLegged
+    code <- liftIO $ do 
+      putStr "Please direct the user to the following address\n\n"
+      putStr "    " >> print url >> putStr "\n\n"
+      putStrLn "... then enter the verification code below (no spaces)\n"
+      S.getLine
+    requestPermanentToken threeLegged code
