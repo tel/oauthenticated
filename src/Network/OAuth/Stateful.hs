@@ -25,7 +25,7 @@ module Network.OAuth.Stateful
   oauth, sign, newParams,
 
   -- * OAuth State
-  withGen, withManager, withCred, getServer, getCredentials, 
+  withGen, withManager, withCred, getServer, getCredentials,
 
   )
   where
@@ -37,8 +37,7 @@ import           Crypto.Random
 import           Network.HTTP.Client.Types       (Request)
 import           Network.OAuth.MuLens
 import qualified Network.OAuth.Signing           as S
-import           Network.OAuth.Types.Credentials (Cred, Token, clientCred,
-                                                  clientToken, resourceToken)
+import           Network.OAuth.Types.Credentials (Cred)
 import           Network.OAuth.Types.Params      (Server (..))
 import qualified Network.OAuth.Types.Params      as P
 
