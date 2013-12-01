@@ -1,6 +1,6 @@
 name:                oauthenticated
-version:             0.0.5
-synopsis:            Simple OAuth client code built atop http-conduit
+version:             0.0.6
+synopsis:            Simple OAuth client code built atop http-client
 
 description:         
   /Warning/: This software is pre 1.0 and thus its API may change very
