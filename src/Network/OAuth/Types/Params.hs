@@ -19,6 +19,9 @@
 
 module Network.OAuth.Types.Params where
 
+-- The Network.HTTP.Client.Internal module is only needed to export getUri.
+-- If getUri enters the stable API then it should be removed.
+
 import           Control.Applicative
 import           Crypto.Random
 import qualified Data.ByteString                 as S
@@ -27,8 +30,8 @@ import qualified Data.ByteString.Char8           as S8
 import           Data.Data
 import           Data.Time
 import           Data.Time.Clock.POSIX
-import           Network.HTTP.Client.Request     (getUri)
-import           Network.HTTP.Client.Types       (Request)
+import qualified Network.HTTP.Client             as Client
+import qualified Network.HTTP.Client.Internal    as Client
 import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.Types.Credentials
 import           Network.OAuth.Util
@@ -79,7 +82,7 @@ instance H.QueryValueLike SignatureMethod where
 -- it is the modern standard. Some servers may only be compliant with an
 -- earlier OAuth version---this should be tested against each server, in
 -- particular the protocols defined in "Network.OAuth.ThreeLegged".
-data Version = OAuthCommunity1 
+data Version = OAuthCommunity1
              -- ^ OAuth Core 1.0 Community Edition
              -- <<http://oauth.net/core/1.0>>
              | OAuthCommunity1a
@@ -103,17 +106,17 @@ instance H.QueryValueLike Version where
 -- for the workflow. This 'Callback' method may be a URL where the parameters
 -- are returned to or the string @\"oob\"@ which indicates that the user is
 -- responsible for returning the @oauth_verifier@ to the client 'OutOfBand'.
-data Callback = OutOfBand | Callback Request
+data Callback = OutOfBand | Callback Client.Request
   deriving ( Typeable )
 
 instance Show Callback where
   show OutOfBand = "OutOfBand"
-  show (Callback req) = "Callback <" ++ show (getUri req) ++ ">"
+  show (Callback req) = "Callback <" ++ show (Client.getUri req) ++ ">"
 
 -- | Prints out in Epoch time format, a printed integer
 instance H.QueryValueLike Callback where
   toQueryValue OutOfBand      = Just "oob"
-  toQueryValue (Callback req) = Just . pctEncode . S8.pack . show . getUri $ req
+  toQueryValue (Callback req) = Just . pctEncode . S8.pack . show . Client.getUri $ req
 
 -- | An Epoch time format timestamp.
 newtype Timestamp = Timestamp UTCTime deriving ( Show, Eq, Ord, Data, Typeable )
@@ -188,7 +191,7 @@ freshPin gen = do
 
 -- | Uses 'emptyPin' to create an empty set of params 'Oa'.
 emptyOa :: Cred ty -> Oa ty
-emptyOa creds = 
+emptyOa creds =
   Oa { credentials = creds, workflow = Standard, pin = emptyPin }
 
 -- | Uses 'freshPin' to create a fresh, default set of params 'Oa'.

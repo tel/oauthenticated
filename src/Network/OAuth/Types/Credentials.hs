@@ -51,7 +51,6 @@ import qualified Data.ByteString      as S
 import           Data.Data
 import           Data.Monoid
 import           Network.HTTP.Types   (parseQuery, urlEncode)
-import           Network.OAuth.MuLens
 import           Network.OAuth.Util
 
 -- Constructors aren't exported. They're only used for derivation
@@ -128,11 +127,13 @@ fromUrlEncoded = tryParse . parseQuery where
 
   lookupV k = join . lookup k
 
-key :: Lens (Token ty) (Token ty) Key Key
+-- | Lens on the key component of a 'Token'.
+key :: Functor f => (Key -> f Key) -> Token ty -> f (Token ty)
 key inj (Token k s) = (`Token` s) <$> inj k
 {-# INLINE key #-}
 
-secret :: Lens (Token ty) (Token ty) Secret Secret
+-- | Lens on the key secret component of a 'Token'.
+secret :: Functor f => (Secret -> f Secret) -> Token ty -> f (Token ty)
 secret inj (Token k s) = Token k <$> inj s
 {-# INLINE secret #-}
 
@@ -143,20 +144,20 @@ data Cred ty = Cred         {-# UNPACK #-} !Key {-# UNPACK #-} !Secret
              | CredAndToken {-# UNPACK #-} !Key {-# UNPACK #-} !Secret {-# UNPACK #-} !(Token ty)
   deriving ( Show, Eq, Ord, Data, Typeable )
 
--- | All 'Cred's have 'Client' 'Token' information.
-clientToken :: Lens (Cred ty) (Cred ty) (Token Client) (Token Client)
+-- | A lens on the client 'Token' in any 'Cred'.
+clientToken :: Functor f => (Token Client -> f (Token Client)) -> Cred ty -> f (Cred ty)
 clientToken inj (Cred k s) = fixUp <$> inj (Token k s) where
   fixUp (Token k' s') = Cred k' s'
 clientToken inj (CredAndToken k s tok) = fixUp <$> inj (Token k s) where
   fixUp (Token k' s') = CredAndToken k' s' tok
 {-# INLINE clientToken #-}
 
--- | Some 'Cred's have resource 'Token' information, i.e. either 'Temporary' or
--- 'Permanent' credentials. This lens can be used to change the type of a
--- 'Cred'.
+-- | A lens focused on the resource 'Token' when available. The only
+-- instances of 'ResourceToken' are 'Temporary' and 'Permanent'. This can
+-- be used to upgrade 'Temporary' 'Cred's to 'Permanent' 'Cred's.
 resourceToken
-  :: (ResourceToken ty, ResourceToken ty') =>
-     Lens (Cred ty) (Cred ty') (Token ty) (Token ty')
+  :: (ResourceToken ty, ResourceToken ty', Functor f) =>
+     (Token ty -> f (Token ty')) -> Cred ty -> f (Cred ty')
 resourceToken inj (CredAndToken k s tok) = CredAndToken k s <$> inj tok
 {-# INLINE resourceToken #-}
 
