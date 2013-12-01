@@ -14,37 +14,20 @@
 
 module Network.OAuth.MuLens (
   -- * Basics
-  Lens, view, use, preview, set,
+  view, set,
   -- * Generalizations
   over, foldMapOf,
   -- * Building
-  lens,
-  -- * Tools
-  zoom,
-  -- * Convenience
-  (<&>), (&), (^.), (.~), (%~), (<~)
+  (<&>), (&), (^.), (.~), (%~),
   ) where
 
 import           Control.Applicative
-import           Control.Monad.Reader
-import           Control.Monad.State
-import           Data.Functor.Constant
 import           Data.Functor.Identity
-import           Data.Monoid
+import           Data.Functor.Constant
 
-type Lens  s t a b = forall f . (Functor f) => (a -> f b) -> s -> f t
-
-view :: MonadReader s m => ((a -> Constant a a) -> s -> Constant a s) -> m a
-view inj = asks (foldMapOf inj id)
+view :: ((a -> Constant a a) -> s -> Constant a s) -> s -> a
+view inj = foldMapOf inj id
 {-# INLINE view #-}
-
-use  :: MonadState s m => ((a -> Constant a a) -> s -> Constant a s) -> m a
-use inj = foldMapOf inj id `liftM` get
-{-# INLINE use #-}
-
-preview :: ((a -> Constant (First a) a) -> s -> Constant (First a) s) -> s -> Maybe a
-preview l = getFirst . foldMapOf l (First . Just)
-{-# INLINE preview #-}
 
 over :: ((a -> Identity b) -> s -> Identity t) -> (a -> b) -> s -> t
 over inj f = runIdentity . inj (Identity . f)
@@ -57,17 +40,6 @@ set l = over l . const
 foldMapOf :: ((a -> Constant r b) -> s -> Constant r t) -> (a -> r) -> s -> r
 foldMapOf inj f = getConstant . inj (Constant . f)
 {-# INLINE foldMapOf #-}
-
-zoom :: Monad m => Lens s s t t -> StateT t m a -> StateT s m a
-zoom l m = do
-  t <- use l
-  (a, t') <- lift $ runStateT m t
-  modify (l .~ t')
-  return a
-
-lens :: (s -> a) -> (s -> b -> t) -> Lens s t a b
-lens gt st inj x = st x <$> inj (gt x)
-{-# INLINE lens #-}
 
 infixl 5 <&>
 (<&>) :: Functor f => f a -> (a -> b) -> f b
@@ -93,7 +65,3 @@ infixr 4 %~
 (%~) :: ((a -> Identity b) -> s -> Identity t) -> (a -> b) -> s -> t
 (%~) = over
 {-# INLINE (%~) #-}
-
-infixr 2 <~
-(<~) :: MonadState s m => ((a -> Identity b) -> s -> Identity s) -> m b -> m ()
-l <~ m = do { a <- m; modify (l .~ a) }
