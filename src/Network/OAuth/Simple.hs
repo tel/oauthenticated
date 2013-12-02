@@ -177,9 +177,6 @@ data TokenRequestFailure =
   | BadPermanentToken SL.ByteString
   deriving ( Show )
 
-mapE :: Functor m => (e -> f) -> EitherT e m a -> EitherT f m a
-mapE f = bimapEitherT f id
-
 -- | Run a full Three-legged authorization protocol using the simple interface
 -- of this module. This is similar to the 'O.requestTokenProtocol' in
 -- "Network.OAuth.ThreeLegged", but offers better error handling due in part to
@@ -190,7 +187,7 @@ requestTokenProtocol
      OAuthT O.Client m (Either TokenRequestFailure (O.Cred O.Permanent))
 requestTokenProtocol man getVerifier = runEitherT $ do
   tempResp <- 
-    mapE HttpExceptionOnTemporaryRequest 
+    bimapEitherT HttpExceptionOnTemporaryRequest id
     $ EitherT $ E.try (requestTemporaryToken man)
   case C.responseBody tempResp of
     Left lbs -> left $ BadTemporaryToken lbs
@@ -198,7 +195,7 @@ requestTokenProtocol man getVerifier = runEitherT $ do
       authUrl  <- lift buildAuthorizationUrl
       verifier <- lift $ lift $ getVerifier authUrl
       permResp <-
-        mapE HttpExceptionOnPermanentRequest 
+        bimapEitherT HttpExceptionOnPermanentRequest id
         $ EitherT $ E.try (requestPermanentToken man verifier)
       case C.responseBody permResp of
         Left lbs  -> left $ BadPermanentToken lbs
