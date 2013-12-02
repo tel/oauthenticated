@@ -27,7 +27,7 @@ module Network.OAuth.Simple (
   oauth, runOAuthSimple,
 
   -- ** More sophisticated interface
-  runOAuth, runOAuthT,
+  runOAuth, runOAuthT, OAuthT (..), OAuth,
 
   -- * Configuration management
   upgradeCred, upgrade,
@@ -55,7 +55,7 @@ module Network.OAuth.Simple (
   requestTemporaryToken, buildAuthorizationUrl, requestPermanentToken,
 
   -- *** Example System
-  requestTokenProtocol
+  requestTokenProtocol, TokenRequestFailure (..)
 
   ) where
 
