@@ -14,11 +14,11 @@ description:
   . 
   @oauthenticated@ is a Haskell library implementing OAuth protocols atop the
   minimalistic @http-client@ HTTP client library extracted from @http-conduit@.
-  It offers a simplified main API in "Network.OAuth" which provides simplistic,
-  authenticated @GET@ and @POST@ requests atop OAuth using a trivial state
-  monad. It also offers a lower-level API in "Network.OAuth.Signing" which can
-  be used to sign arbitrary requests while intercepting and modifying the OAuth
-  parameter set.  
+  "Network.OAuth" offers simple functions for signing 
+  'Network.HTTP.Client.Request's along with tools for 'Network.OAuth.Cred'ential
+  management and 'Network.OAuth.Server' configuration. "Network.OAuth.Simple" 
+  provides a slightly more heavy-weight interface which manages the necessary state
+  and configuration using a monad transformer stack.
   .
   There's also an implementation of OAuth's three-legged credential acquisition
   protocol built atop the "Network.OAuth" API. This can be handled in both
@@ -56,11 +56,11 @@ library
                      , base64-bytestring
                      , blaze-builder
                      , bytestring
-                     , exceptions
-                     , either
                      , case-insensitive
                      , crypto-random
                      , cryptohash
+                     , either
+                     , exceptions
                      , http-client         >= 0.2.0
                      , http-types
                      , mtl
