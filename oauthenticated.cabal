@@ -56,10 +56,11 @@ library
                      , base64-bytestring
                      , blaze-builder
                      , bytestring
+                     , exceptions
+                     , either
                      , case-insensitive
                      , crypto-random
                      , cryptohash
-                     , exceptions
                      , http-client         >= 0.2.0
                      , http-types
                      , mtl

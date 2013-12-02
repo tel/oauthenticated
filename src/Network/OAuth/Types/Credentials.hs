@@ -38,7 +38,7 @@ module Network.OAuth.Types.Credentials (
   fromUrlEncoded,
 
   -- * Credentials and credential construction
-  Cred, clientCred, temporaryCred, permanentCred,
+  Cred, clientCred, temporaryCred, permanentCred, upgradeCred,
 
   -- * Accessors
   key, secret, clientToken, resourceToken, getResourceTokenDef, signingKey
@@ -89,9 +89,15 @@ data Token ty = Token {-# UNPACK #-} !Key
   deriving ( Show, Eq, Ord, Data, Typeable )
 
 class ResourceToken tk where
+  upgradeCred' :: Token tk -> Cred tk' -> Cred tk
+  upgradeCred' tok (Cred         k s  ) = CredAndToken k s tok
+  upgradeCred' tok (CredAndToken k s _) = CredAndToken k s tok
 
 instance ResourceToken Temporary
 instance ResourceToken Permanent
+
+upgradeCred :: ResourceToken tk => Token tk -> Cred tk' -> Cred tk
+upgradeCred = upgradeCred'
 
 -- | Parses a JSON object with keys @oauth_token@ and @oauth_token_secret@, the
 -- standard format for OAuth 1.0.
