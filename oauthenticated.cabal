@@ -43,6 +43,7 @@ cabal-version:       >=1.10
 library
   exposed-modules:
     Network.OAuth
+    Network.OAuth.Simple
     Network.OAuth.Signing
     Network.OAuth.ThreeLegged
     Network.OAuth.Types.Credentials
@@ -58,8 +59,10 @@ library
                      , case-insensitive
                      , crypto-random
                      , cryptohash
+                     , exceptions
                      , http-client         >= 0.2.0
                      , http-types
+                     , mtl
                      , network
                      , time
                      , transformers
