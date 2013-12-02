@@ -35,9 +35,6 @@ module Network.OAuth.Signing (
 
   ) where
 
--- Network.HTTP.Client.Internal is only imported to get getUri and should
--- be removed if getUri enters the stable interface.
-
 import qualified Blaze.ByteString.Builder        as Blz
 import           Control.Applicative
 import           Crypto.Hash.SHA1                (hash)
@@ -52,7 +49,6 @@ import           Data.List                       (sort)
 import           Data.Maybe                      (fromMaybe, mapMaybe)
 import           Data.Monoid
 import qualified Network.HTTP.Client             as C
-import qualified Network.HTTP.Client.Internal    as C
 import qualified Network.HTTP.Types              as H
 import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.MuLens

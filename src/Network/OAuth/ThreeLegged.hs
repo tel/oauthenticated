@@ -30,16 +30,12 @@ module Network.OAuth.ThreeLegged (
   requestTokenProtocol, requestTokenProtocol'
   ) where
 
--- The Network.HTTP.Client.Internal module is only needed to export getUri.
--- If getUri enters the stable API then it should be removed.
-
 import           Control.Applicative
 import           Control.Exception               as E
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Data
 import qualified Network.HTTP.Client             as C
-import qualified Network.HTTP.Client.Internal    as C
 import           Network.HTTP.Types              (renderQuery)
 import qualified Network.OAuth                   as O
 import           Network.OAuth.MuLens

@@ -19,9 +19,6 @@
 
 module Network.OAuth.Types.Params where
 
--- The Network.HTTP.Client.Internal module is only needed to export getUri.
--- If getUri enters the stable API then it should be removed.
-
 import           Control.Applicative
 import           Crypto.Random
 import qualified Data.ByteString                 as S
@@ -31,7 +28,6 @@ import           Data.Data
 import           Data.Time
 import           Data.Time.Clock.POSIX
 import qualified Network.HTTP.Client             as Client
-import qualified Network.HTTP.Client.Internal    as Client
 import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.Types.Credentials
 import           Network.OAuth.Util
