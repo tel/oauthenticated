@@ -1,6 +1,6 @@
 name:                oauthenticated
-version:             0.0.6
-synopsis:            Simple OAuth client code built atop http-client
+version:             0.1.0
+synopsis:            Simple OAuth for http-client
 
 description:         
   /Warning/: This software is pre 1.0 and thus its API may change very
@@ -52,20 +52,20 @@ library
     Network.OAuth.MuLens
     Network.OAuth.Util
   build-depends:       base                >= 4.6      && <  4.7
-                     , aeson
-                     , base64-bytestring
-                     , blaze-builder
-                     , bytestring
-                     , case-insensitive
-                     , crypto-random
-                     , cryptohash
-                     , either
-                     , exceptions
+                     , aeson               >= 0.6.2    && < 0.7
+                     , base64-bytestring   >= 1.0      && < 1.1
+                     , blaze-builder       >= 0.3
+                     , bytestring          >= 0.9
+                     , case-insensitive    >= 1.0      && < 1.2
+                     , crypto-random       >= 0.0.7
+                     , cryptohash          >= 0.11     && < 0.12
+                     , either              >= 4.0      && < 5.0
+                     , exceptions          >= 0.3      && < 0.4
                      , http-client         >= 0.2.0
-                     , http-types
-                     , mtl
-                     , network
-                     , time
+                     , http-types          >= 0.8
+                     , mtl                 >= 2.0
+                     , network             >= 2.3
+                     , time                >= 1.2
                      , transformers
 
   hs-source-dirs:      src         
