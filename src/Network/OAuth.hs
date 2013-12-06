@@ -1,5 +1,3 @@
-{-# LANGUAGE TupleSections #-}
-
 -- |
 -- Module      : Network.OAuth
 -- Copyright   : (c) Joseph Abrahamson 2013
@@ -9,95 +7,66 @@
 -- Stability   : experimental
 -- Portability : non-portable
 --
--- "Network.OAuth" provides simple OAuth signed requests atop
--- "Network.HTTP.Client". This module exports a simplified interface atop
--- the monadic interface defined in "Network.OAuth.Stateful".
+-- OAuth tools for using @http-client@ for authenticated requests.
 --
--- If more control is needed, the low-level functions for creating, customizing,
--- and managing OAuth 'Cred'entials, 'Token's, and parameter sets ('Oa')
--- are using them to sign 'Network.HTTP.Client.Types.Request's are
--- available in "Network.OAuth.Types.Params",
--- "Network.OAuth.Types.Credentials", and "Network.OAuth.Signing".
-
+-- The functions here form the simplest basis for sending OAuthenticated
+-- 'C.Request's. In order to generate credentials according to the OAuth
+-- "three-legged workflow" use actions in the "Network.OAuth.ThreeLegged"
+-- module.
+--
 module Network.OAuth (
 
-  -- * The basic monadic API
-  oauth,
-
-  -- * Simplified requests layer
-  simpleOAuth, Params (..), Query, QueryItem,
-
-  -- * OAuth Monad
+  -- * Authenticating a request
   --
-  -- The 'OAuthT' monad is nothing more than a 'Control.Monad.State.StateT'
-  -- transformer containing OAuth state.
-  OAuthT, runOAuthT, runOAuthT',
+  -- | The 'oauthSimple' function can be used to sign a 'C.Request' as it
+  -- stands. It should be performed just before the 'C.Request' is used as
+  -- it uses the current timestamp and thus may only be valid for a limited
+  -- amount of time.
+  --
+  -- 'oauthSimple' creates a /new/ random entropy pool every time it is
+  -- called, thus it can be both slow and cryptographically dangerous to
+  -- use it repeatedly as it can drain system entropy. Instead, the plain 'S.oauth'
+  -- function should be used which allows for threading of the random
+  -- source.
+  --
+  oauthSimple, S.oauth,
+
+  -- * Lower-level and pure functionality
+  --
+  -- | When necessary to control or observe the signature more
+  -- carefully, the lower level API can be used. This requires generating
+  -- a fresh set of 'O.Oa' parameters from a relevant or deterministic
+  -- 'O.OaPin' and then using 'S.sign' to sign the 'C.Request'.
+  S.sign,
+  
+  -- ** Generating OAuth parameters
+  O.emptyOa, O.freshOa, O.emptyPin, O.freshPin, 
+
+  -- * OAuth Credentials
+  O.Token (..), O.Cred, O.Client, O.Temporary, O.Permanent,
+
+  -- ** Creating Credentials  
+  O.clientCred, O.temporaryCred, O.permanentCred,
+  O.fromUrlEncoded,
 
   -- * OAuth Configuration
-  --
-  -- OAuth requests are parameterized by 'Server' configuration and client
-  -- 'Cred'entials. These can be modified within an 'OAuthT' thread by using
-  -- the 'Network.OAuth.MuLens.Lens'es in "Network.OAuth.Stateful".
-  Server (..), ParameterMethod (..), SignatureMethod (..), Version (..),
-  defaultServer,
+  O.Server (..), O.defaultServer,
+  O.ParameterMethod (..), O.SignatureMethod (..), O.Version (..),
 
-  -- ** Credential managerment
-  --
-  -- Credentials are parameterized by 3 types
-  Permanent, Temporary, Client,
-
-  -- And are composed of both 'Token's and 'Cred'entials.
-  Cred, Token (..),
-  clientCred, temporaryCred, permanentCred,
-
-  -- ** Access lenses
-  key, secret, clientToken, resourceToken
   ) where
 
-import           Control.Applicative
-import           Control.Monad.Catch
-import           Control.Monad.Trans
-import qualified Data.ByteString.Lazy            as SL
-import           Data.Maybe                      (mapMaybe)
-import           Network.HTTP.Client             (httpLbs)
-import           Network.HTTP.Client.Request     (parseUrl, urlEncodedBody)
-import           Network.HTTP.Client.Response    (Response)
-import           Network.HTTP.Client.Types       (HttpException, method,
-                                                  queryString)
-import           Network.HTTP.Types              (Query, QueryItem, methodGet,
-                                                  renderQuery)
-import           Network.OAuth.Stateful
-import           Network.OAuth.Types.Credentials (Client, Cred, Permanent,
-                                                  Temporary, Token (..),
-                                                  clientCred, clientToken, key,
-                                                  permanentCred, resourceToken,
-                                                  secret, temporaryCred)
-import           Network.OAuth.Types.Params      (ParameterMethod (..),
-                                                  Server (..),
-                                                  SignatureMethod (..),
-                                                  Version (..), defaultServer)
+import qualified Crypto.Random                   as R
+import qualified Network.HTTP.Client             as C
+import qualified Network.OAuth.Signing           as S
+import qualified Network.OAuth.Types.Credentials as O
+import qualified Network.OAuth.Types.Params      as O
 
--- | 'Params' quickly set the parameterization of a 'Request', either
--- a @GET@ request with a query string or a @POST@ request with
--- a @www-form-urlencoded@ body.
-data Params = QueryParams Query
-            | BodyParams  Query
-
--- | Send an OAuth GET request to a particular URI. Throws an exception if
--- the URI cannot be parsed or if errors occur during the request.
-simpleOAuth
-  :: (MonadIO m, MonadCatch m) =>
-  String -> Params -> OAuthT ty m (Response SL.ByteString)
-simpleOAuth url ps = case parseUrl url of
-  Left err -> lift $ throwM (err :: HttpException)
-  Right rq -> do
-    signedRq <- oauth $ addParams ps rq
-    withManager (liftIO . httpLbs signedRq)
-  where
-    addParams (QueryParams q) req =
-      req { method = methodGet
-          , queryString = renderQuery True q
-          }
-    addParams (BodyParams q) req =
-      let params = mapMaybe (\(a, b) -> (a,) <$> b) q
-      in  urlEncodedBody params req
+-- | Sign a request with a fresh set of parameters. Creates a fresh
+-- 'R.SystemRNG' using new entropy for each signing and thus is potentially
+-- /dangerous/ if used too frequently. In almost all cases, 'S.oauth'
+-- should be used instead.
+oauthSimple :: O.Cred ty -> O.Server -> C.Request -> IO C.Request
+oauthSimple cr srv req = do
+  entropy   <- R.createEntropyPool
+  (req', _) <- S.oauth cr srv req (R.cprgCreate entropy :: R.SystemRNG)
+  return req'

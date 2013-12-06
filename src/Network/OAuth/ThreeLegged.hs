@@ -16,7 +16,9 @@
 
 module Network.OAuth.ThreeLegged (
   -- * Configuration types
-  ThreeLegged (..), parseThreeLegged, Callback (..),
+  ThreeLegged (..), parseThreeLegged, P.Callback (..),
+
+  P.Verifier,
 
   -- * Actions
   requestTemporaryToken, buildAuthorizationUrl, requestPermanentToken,
@@ -25,24 +27,20 @@ module Network.OAuth.ThreeLegged (
   requestTemporaryTokenRaw, requestPermanentTokenRaw,
 
   -- * Example system
-  requestTokenProtocol
+  requestTokenProtocol, requestTokenProtocol'
   ) where
 
 import           Control.Applicative
-import           Control.Monad.Trans
-import           Control.Monad.Trans.Maybe
+import           Control.Exception               as E
+import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
-import qualified Data.ByteString                 as S
 import           Data.Data
-import           Network.HTTP.Client             (httpLbs)
-import           Network.HTTP.Client.Request     (getUri,parseUrl)
-import           Network.HTTP.Client.Types       (Request (..), Response (..), HttpException)
+import qualified Network.HTTP.Client             as C
 import           Network.HTTP.Types              (renderQuery)
-import           Network.OAuth
+import qualified Network.OAuth                   as O
 import           Network.OAuth.MuLens
-import           Network.OAuth.Stateful
-import           Network.OAuth.Types.Credentials
-import           Network.OAuth.Types.Params
+import qualified Network.OAuth.Types.Credentials as Cred
+import qualified Network.OAuth.Types.Params      as P
 import           Network.URI
 
 -- | Data parameterizing the \"Three-legged OAuth\" redirection-based
@@ -50,98 +48,162 @@ import           Network.URI
 -- in the community editions /OAuth Core 1.0/ and /OAuth Core 1.0a/ as well
 -- as RFC 5849.
 data ThreeLegged =
-  ThreeLegged { temporaryTokenRequest :: Request
+  ThreeLegged { temporaryTokenRequest      :: C.Request
               -- ^ Base 'Request' for the \"endpoint used by the client to
               -- obtain a set of 'Temporary' 'Cred'entials\" in the form of
               -- a 'Temporary' 'Token'. This request is automatically
               -- instantiated and performed during the first leg of the
               -- 'ThreeLegged' authorization protocol.
-              , resourceOwnerAuthorization :: Request
+              , resourceOwnerAuthorization :: C.Request
               -- ^ Base 'Request' for the \"endpoint to which the resource
               -- owner is redirected to grant authorization\". This request
               -- must be performed by the user granting token authorization
               -- to the client. Transmitting the parameters of this request
               -- to the user is out of scope of @oauthenticated@, but
               -- functions are provided to make it easier.
-              , permanentTokenRequest      :: Request
+              , permanentTokenRequest      :: C.Request
               -- ^ Base 'Request' for the \"endpoint used by the client to
               -- request a set of token credentials using the set of
               -- 'Temporary' 'Cred'entials\". This request is also
               -- instantiated and performed by @oauthenticated@ in order to
               -- produce a 'Permanent' 'Token'.
-              , callback                   :: Callback
+              , callback                   :: P.Callback
               -- ^ The 'Callback' parameter configures how the user is
               -- intended to communicate the 'Verifier' back to the client.
               }
     deriving ( Show, Typeable )
 
 -- | Convenience method for creating a 'ThreeLegged' configuration from
--- a trio of URLs and a 'Callback'.
-parseThreeLegged :: String -> String -> String -> Callback -> Either HttpException ThreeLegged
-parseThreeLegged a b c d = ThreeLegged <$> parseUrl a <*> parseUrl b <*> parseUrl c <*> pure d
+-- a trio of URLs and a 'Callback'. Returns 'Nothing' if one of the
+-- callback URLs could not be parsed correctly.
+parseThreeLegged :: String -> String -> String -> P.Callback -> Maybe ThreeLegged
+parseThreeLegged a b c d =
+  ThreeLegged <$> C.parseUrl a
+              <*> C.parseUrl b
+              <*> C.parseUrl c
+              <*> pure d
 
 -- | Request a 'Temporary' 'Token' based on the parameters of
 -- a 'ThreeLegged' protocol. This returns the raw response which should be
 -- encoded as @www-form-urlencoded@.
-requestTemporaryTokenRaw :: MonadIO m => ThreeLegged -> OAuthT Client m SL.ByteString
-requestTemporaryTokenRaw (ThreeLegged {..}) = do
-  oax  <- newParams
-  req  <- sign (oax { workflow = TemporaryTokenRequest callback }) temporaryTokenRequest
-  resp <- withManager (liftIO . httpLbs req)
-  return $ responseBody resp
+--
+-- Throws 'C.HttpException's.
+requestTemporaryTokenRaw
+  :: R.CPRG gen => O.Cred O.Client -> O.Server
+                -> ThreeLegged -> C.Manager -> gen
+                -> IO (C.Response SL.ByteString, gen)
+requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man gen = do
+  (oax, gen') <- O.freshOa cr gen
+  let req = O.sign (oax { P.workflow = P.TemporaryTokenRequest callback }) srv temporaryTokenRequest
+  lbs <- C.httpLbs req man
+  return (lbs, gen')
 
--- | Returns 'Nothing' if the response could not be decoded as a 'Token'.
--- Importantly, in RFC 5849 compliant modes this requires that the token
--- response includes @callback_confirmed=true@. See also
--- 'requestTemporaryTokenRaw'.
-requestTemporaryToken :: MonadIO m => ThreeLegged -> OAuthT Client m (Maybe (Token Temporary))
-requestTemporaryToken tl = do
-  raw <- requestTemporaryTokenRaw tl
-  s   <- getServer
-  let mayToken = fromUrlEncoded $ SL.toStrict raw
-  return $ do
-    (confirmed, tok) <- mayToken
-    case oAuthVersion s of
-      OAuthCommunity1 -> return tok
-      _               -> if confirmed then return tok else fail "Must be confirmed"
+-- | Returns the raw result if the 'C.Response' could not be parsed as
+-- a valid 'O.Token'.  Importantly, in RFC 5849 compliant modes this
+-- requires that the token response includes @callback_confirmed=true@. See
+-- also 'requestTemporaryTokenRaw'.
+--
+-- Throws 'C.HttpException's.
+requestTemporaryToken
+  :: R.CPRG gen => O.Cred O.Client -> O.Server
+                -> ThreeLegged -> C.Manager -> gen
+                -> IO (C.Response (Either SL.ByteString (O.Token O.Temporary)), gen)
+requestTemporaryToken cr srv tl man gen = do
+  (raw, gen') <- requestTemporaryTokenRaw cr srv tl man gen
+  return (tryParseToken <$> raw, gen')
+  where
+    tryParseToken lbs = case maybeParseToken lbs of
+      Nothing  -> Left lbs
+      Just tok -> Right tok
+    maybeParseToken lbs =
+      do (confirmed, tok) <- O.fromUrlEncoded $ SL.toStrict lbs
+         case P.oAuthVersion srv of
+           O.OAuthCommunity1 -> return tok
+           _                 -> if confirmed then return tok else fail "Must be confirmed"
 
 -- | Produce a 'URI' which the user should be directed to in order to
 -- authorize a set of 'Temporary' 'Cred's.
-buildAuthorizationUrl :: Monad m => ThreeLegged -> OAuthT Temporary m URI
-buildAuthorizationUrl (ThreeLegged {..}) = do
-  c <- getCredentials
-  return $ getUri $ resourceOwnerAuthorization {
-    queryString = renderQuery True [ ("oauth_token", Just (c ^. resourceToken . key)) ]
+buildAuthorizationUrl :: O.Cred O.Temporary -> ThreeLegged -> URI
+buildAuthorizationUrl cr (ThreeLegged {..}) =
+  C.getUri $ resourceOwnerAuthorization {
+    C.queryString = renderQuery True [ ("oauth_token", Just (cr ^. Cred.resourceToken . Cred.key)) ]
   }
 
 -- | Request a 'Permanent 'Token' based on the parameters of
 -- a 'ThreeLegged' protocol. This returns the raw response which should be
 -- encoded as @www-form-urlencoded@.
-requestPermanentTokenRaw :: MonadIO m => ThreeLegged -> Verifier -> OAuthT Temporary m SL.ByteString
-requestPermanentTokenRaw (ThreeLegged {..}) verifier = do
-  oax  <- newParams
-  req  <- sign (oax { workflow = PermanentTokenRequest verifier }) permanentTokenRequest
-  resp <- withManager (liftIO . httpLbs req)
-  return $ responseBody resp
+--
+-- Throws 'C.HttpException's.
+requestPermanentTokenRaw
+  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
+                -> P.Verifier
+                -> ThreeLegged -> C.Manager -> gen
+                -> IO (C.Response SL.ByteString, gen)
+requestPermanentTokenRaw cr srv verifier (ThreeLegged {..}) man gen = do
+  (oax, gen') <- O.freshOa cr gen
+  let req = O.sign (oax { P.workflow = P.PermanentTokenRequest verifier }) srv permanentTokenRequest
+  lbs <- C.httpLbs req man
+  return (lbs, gen')
 
 -- | Returns 'Nothing' if the response could not be decoded as a 'Token'.
 -- See also 'requestPermanentTokenRaw'.
-requestPermanentToken :: MonadIO m => ThreeLegged -> Verifier -> OAuthT Temporary m (Maybe (Token Permanent))
-requestPermanentToken tl verifier = do
-  raw <- requestPermanentTokenRaw tl verifier
-  return $ fmap snd $ fromUrlEncoded $ SL.toStrict raw
+--
+-- Throws 'C.HttpException's.
+requestPermanentToken 
+  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
+                -> P.Verifier
+                -> ThreeLegged -> C.Manager -> gen
+                -> IO (C.Response (Either SL.ByteString (O.Token O.Permanent)), gen)
+requestPermanentToken cr srv verifier tl man gen = do
+  (raw, gen') <- requestPermanentTokenRaw cr srv verifier tl man gen
+  return (tryParseToken <$> raw, gen')
+  where
+    tryParseToken lbs = case maybeParseToken lbs of
+      Nothing  -> Left lbs
+      Just tok -> Right tok
+    maybeParseToken = fmap snd . O.fromUrlEncoded . SL.toStrict
 
--- | Performs an interactive token request over stdin assuming that the
--- verifier code is acquired out-of-band.
-requestTokenProtocol :: MonadIO m => ThreeLegged -> OAuthT Client m (Maybe (Token Permanent))
-requestTokenProtocol threeLegged = runMaybeT $ do
-  cCred <- lift getCredentials
-  tok <- MaybeT (requestTemporaryToken threeLegged)
-  MaybeT $ withCred (temporaryCred tok cCred) $ do
-    url <- buildAuthorizationUrl threeLegged
-    code <- liftIO $ do 
-      putStr "Please direct the user to the following address\n\n"
-      putStr "    " >> print url >> putStr "\n\n"
-      putStrLn "... then enter the verification code below (no spaces)\n"
-      S.getLine
-    requestPermanentToken threeLegged code
+-- | Like 'requestTokenProtocol' but allows for specification of the
+-- 'C.ManagerSettings'.
+requestTokenProtocol' 
+  :: C.ManagerSettings -> O.Cred O.Client -> O.Server -> ThreeLegged 
+     -> (URI -> IO P.Verifier) 
+     -> IO (Maybe (O.Cred O.Permanent))
+requestTokenProtocol' mset cr srv tl getVerifier = do
+  entropy <- R.createEntropyPool
+  E.bracket (C.newManager mset) C.closeManager $ \man -> do
+    let gen = (R.cprgCreate entropy :: R.SystemRNG)
+    (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen 
+    case C.responseBody respTempToken of
+      Left _ -> return Nothing
+      Right tok -> do
+        let tempCr = O.temporaryCred tok cr
+        verifier <- getVerifier $ buildAuthorizationUrl tempCr tl
+        (respPermToken, _) <- requestPermanentToken tempCr srv verifier tl man gen'
+        case C.responseBody respPermToken of
+          Left _ -> return Nothing
+          Right tok' -> return (Just $ O.permanentCred tok' cr)
+
+-- | Performs an interactive token request provided credentials,
+-- configuration, and a way to convert a user authorization 'URI' into
+-- a 'P.Verifier' out of band. Does not use any kind of TLS protection---it
+-- will throw a 'C.TlsNotSupported' exception if TLS is required.
+--
+-- Throws 'C.HttpException's.
+requestTokenProtocol 
+  :: O.Cred O.Client -> O.Server -> ThreeLegged 
+     -> (URI -> IO P.Verifier) 
+     -> IO (Maybe (O.Cred O.Permanent))
+requestTokenProtocol = requestTokenProtocol' C.defaultManagerSettings
+
+
+  -- cCred <- lift getCredentials
+  -- tok <- MaybeT (requestTemporaryToken threeLegged)
+  -- MaybeT $ withCred (temporaryCred tok cCred) $ do
+  --   url <- buildAuthorizationUrl threeLegged
+  --   code <- liftIO $ do
+  --     putStr "Please direct the user to the following address\n\n"
+  --     putStr "    " >> print url >> putStr "\n\n"
+  --     putStrLn "... then enter the verification code below (no spaces)\n"
+  --     S.getLine
+  --   requestPermanentToken threeLegged code

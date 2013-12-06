@@ -18,15 +18,15 @@
 module Network.OAuth.Signing (
 
   -- * Primary interface
-  
+
   -- | The 'oauth' and 'sign' commands can be used as low level signing
   -- primitives, and they are indeed used to build the "Network.OAuth.Stateful"
   -- interface exported by default.
-  
+
   oauth, sign,
 
   -- * Low-level interface
-  
+
   -- | The low-level interface is used to build 'oauth' and 'sign' and can be
   -- useful for testing.
 
@@ -39,16 +39,16 @@ import qualified Blaze.ByteString.Builder        as Blz
 import           Control.Applicative
 import           Crypto.Hash.SHA1                (hash)
 import           Crypto.MAC.HMAC                 (hmac)
+import           Crypto.Random
 import qualified Data.ByteString                 as S
 import qualified Data.ByteString.Base64          as S64
 import qualified Data.ByteString.Char8           as S8
+import qualified Data.ByteString.Lazy            as SL
 import           Data.Char                       (toUpper)
-import           Data.Int                        (Int64)
 import           Data.List                       (sort)
 import           Data.Maybe                      (fromMaybe, mapMaybe)
 import           Data.Monoid
-import qualified Network.HTTP.Client.Request     as C
-import qualified Network.HTTP.Client.Types       as C
+import qualified Network.HTTP.Client             as C
 import qualified Network.HTTP.Types              as H
 import qualified Network.HTTP.Types.QueryLike    as H
 import           Network.OAuth.MuLens
@@ -56,7 +56,6 @@ import           Network.OAuth.Types.Credentials
 import           Network.OAuth.Types.Params
 import           Network.OAuth.Util
 import           Network.URI
-import Crypto.Random
 
 -- | Sign a request with a fresh set of parameters.
 oauth :: CPRG gen => Cred ty -> Server -> C.Request -> gen -> IO (C.Request, gen)
@@ -96,7 +95,7 @@ augmentRequest AuthorizationHeader q req =
   let replaceHeader :: H.HeaderName -> S.ByteString -> H.RequestHeaders -> H.RequestHeaders
       replaceHeader n b [] = [(n, b)]
       replaceHeader n b (x@(hn, _):rest) | n == hn   = (n, b):rest
-				         | otherwise = x : replaceHeader n b rest
+                 | otherwise = x : replaceHeader n b rest
       authHeader = "OAuth " <> S8.intercalate ", " pairs
       pairs = map mkPair q
       mkPair (k, v) = k <> "=\"" <> fromMaybe "" v <> "\""
@@ -111,7 +110,7 @@ augmentRequest RequestEntityBody q req =
 canonicalBaseString :: Oa ty -> Server -> C.Request -> S.ByteString
 canonicalBaseString oax server req =
   S8.intercalate "&" [ S8.map toUpper (C.method req)
-            		     , canonicalUri req
+                     , canonicalUri req
                      , canonicalParams oax server req
                      ]
 
@@ -161,9 +160,9 @@ canonicalUri req =
     fauthority Nothing               = ""
     fauthority (Just (URIAuth {..})) =
       let -- Canonical URIs do not display their port unless it is non-standard
-	        fport | (uriPort == ":443") && (uriScheme == "https:") = ""
-            		| (uriPort == ":80" ) && (uriScheme == "http:" ) = ""
-		            | otherwise                                      = uriPort
+          fport | (uriPort == ":443") && (uriScheme == "https:") = ""
+                | (uriPort == ":80" ) && (uriScheme == "http:" ) = ""
+                | otherwise                                      = uriPort
       in  uriRegName <> fport
 
 -- | Queries a 'C.Request' body and tries to interpret it as a set of OAuth
@@ -171,10 +170,16 @@ canonicalUri req =
 -- streaming variety then it is /not/ a set of OAuth parameters---dropping this
 -- assumption would prevent this from being pure.
 bodyParams :: C.Request -> H.Query
-bodyParams = digestBody . C.simplify . C.requestBody where
-  digestBody :: Either (Int64, Blz.Builder) (Maybe Int64, C.GivesPopper ()) -> H.Query
-  digestBody (Left (_, builder)) = H.parseQuery (Blz.toByteString builder)
-  digestBody (Right _) = []
+bodyParams = digestBody . C.requestBody where
+  digestBody :: C.RequestBody -> H.Query
+  digestBody (C.RequestBodyLBS lbs) = H.parseQuery (SL.toStrict lbs)
+  digestBody (C.RequestBodyBS   bs) = H.parseQuery bs
+  digestBody (C.RequestBodyBuilder _ b) = H.parseQuery (Blz.toByteString b)
+  digestBody (C.RequestBodyStream  _ _) = []
+  digestBody (C.RequestBodyStreamChunked _) = []
+
+  -- digestBody (Left (_, builder)) = H.parseQuery (Blz.toByteString builder)
+  -- digestBody (Right _) = []
 
 queryParams :: C.Request -> H.Query
 queryParams = H.parseQuery . C.queryString
