@@ -114,8 +114,8 @@ instance ToJSON (Token ty) where
                               , "oauth_token_secret" .= (decodeLatin1 s)
                               ]
 
--- | Parses a @www-form-urlencoded@ stream to produce a 'Token' if possible. 
--- The first result value is whether or not the token data is OAuth 1.0a 
+-- | Parses a @www-form-urlencoded@ stream to produce a 'Token' if possible.
+-- The first result value is whether or not the token data is OAuth 1.0a
 -- compatible.
 --
 -- >>> fromUrlEncoded "oauth_token=key&oauth_token_secret=secret"
@@ -126,7 +126,7 @@ instance ToJSON (Token ty) where
 --
 fromUrlEncoded :: S.ByteString -> Maybe (Bool, Token ty)
 fromUrlEncoded = tryParse . parseQuery where
-  tryParse q = do 
+  tryParse q = do
     tok <- Token <$> lookupV "oauth_token"        q
                  <*> lookupV "oauth_token_secret" q
     confirmed <- lookupV "oauth_callback_confirmed" q <|> pure ""
