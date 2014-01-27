@@ -52,6 +52,7 @@ import           Data.Data
 import           Data.Monoid
 import           Network.HTTP.Types   (parseQuery, urlEncode)
 import           Network.OAuth.Util
+import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
 
 -- Constructors aren't exported. They're only used for derivation
 -- purposes.
@@ -103,18 +104,18 @@ upgradeCred = upgradeCred'
 -- standard format for OAuth 1.0.
 instance FromJSON (Token ty) where
   parseJSON = withObject "OAuth Token" $ \o ->
-    Token <$> o .: "oauth_token"
-          <*> o .: "oauth_token_secret"
+    Token <$> fmap encodeUtf8 (o .: "oauth_token")
+          <*> fmap encodeUtf8 (o .: "oauth_token_secret")
 
 -- | Produces a JSON object using keys named @oauth_token@ and
 -- @oauth_token_secret@.
 instance ToJSON (Token ty) where
-  toJSON (Token k s) = object [ "oauth_token"        .= k
-                              , "oauth_token_secret" .= s
+  toJSON (Token k s) = object [ "oauth_token"        .= (decodeLatin1 k)
+                              , "oauth_token_secret" .= (decodeLatin1 s)
                               ]
 
--- | Parses a @www-form-urlencoded@ stream to produce a 'Token' if possible. 
--- The first result value is whether or not the token data is OAuth 1.0a 
+-- | Parses a @www-form-urlencoded@ stream to produce a 'Token' if possible.
+-- The first result value is whether or not the token data is OAuth 1.0a
 -- compatible.
 --
 -- >>> fromUrlEncoded "oauth_token=key&oauth_token_secret=secret"
@@ -125,7 +126,7 @@ instance ToJSON (Token ty) where
 --
 fromUrlEncoded :: S.ByteString -> Maybe (Bool, Token ty)
 fromUrlEncoded = tryParse . parseQuery where
-  tryParse q = do 
+  tryParse q = do
     tok <- Token <$> lookupV "oauth_token"        q
                  <*> lookupV "oauth_token_secret" q
     confirmed <- lookupV "oauth_callback_confirmed" q <|> pure ""
