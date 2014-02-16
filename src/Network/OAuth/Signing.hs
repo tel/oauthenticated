@@ -98,7 +98,10 @@ augmentRequest AuthorizationHeader q req =
                  | otherwise = x : replaceHeader n b rest
       authHeader = "OAuth " <> S8.intercalate ", " pairs
       pairs = map mkPair q
-      mkPair (k, v) = k <> "=\"" <> fromMaybe "" v <> "\""
+      -- We should perhaps pctEncode the key in each pair as well, but so
+      -- long as this is a well-formed OAuth header the keys will never
+      -- require encoding.
+      mkPair (k, v) = k <> "=\"" <> pctEncode (fromMaybe "" v) <> "\""
   in req { C.requestHeaders = replaceHeader H.hAuthorization authHeader (C.requestHeaders req) }
 augmentRequest QueryString q req =
   let q0 = H.parseQuery (C.queryString req)
