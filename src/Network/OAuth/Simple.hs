@@ -86,6 +86,7 @@ newtype OAuthT ty m a =
            , MonadReader (OaConfig ty)
            , MonadState R.SystemRNG
            , E.MonadCatch
+           , E.MonadThrow
            , MonadIO
            )
 instance MonadTrans (OAuthT ty) where lift = OAuthT . lift . lift
