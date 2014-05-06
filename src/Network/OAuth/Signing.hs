@@ -124,9 +124,13 @@ canonicalParams oax server req =
 
       combine :: [S.ByteString] -> S.ByteString
       combine = pctEncode . S8.intercalate "&"
+
+      reqIsFormUrlEncoded = case lookup H.hContentType (C.requestHeaders req) of
+                              Just "application/x-www-form-urlencoded" -> True
+                              _                                        -> False
   in combine . sort . map build . mconcat
      $ [ oauthParams oax server
-       , bodyParams req
+       , if reqIsFormUrlEncoded then bodyParams req else []
        , queryParams req
        ]
 
