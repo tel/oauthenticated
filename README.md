@@ -6,9 +6,9 @@
   tweets to the Twitter client registered on their phone.
   
   `oauthenticated` is a Haskell library implementing OAuth protocols
-  atop the popular `http-conduit` HTTP client library. The goal is to
+  atop the popular `http-client` HTTP client library. The goal is to
   provide a general framework for signing
-  'Network.HTTP.Conduit.Request's according to server parameters, a
+  'Network.HTTP.Client.Request's according to server parameters, a
   simple method for executing the common 3-arm OAuth token negotiation
   protocol, and a simplified API for accessing OAuth-protected
   resources.
