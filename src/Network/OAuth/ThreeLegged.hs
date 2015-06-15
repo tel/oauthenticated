@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
@@ -30,7 +31,14 @@ module Network.OAuth.ThreeLegged (
   requestTokenProtocol, requestTokenProtocol'
   ) where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import           Control.Exception               as E
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
@@ -89,9 +97,9 @@ parseThreeLegged a b c d =
 --
 -- Throws 'C.HttpException's.
 requestTemporaryTokenRaw
-  :: R.CPRG gen => O.Cred O.Client -> O.Server
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response SL.ByteString, gen)
+  :: R.DRG gen => O.Cred O.Client -> O.Server
+               -> ThreeLegged -> C.Manager -> gen
+               -> IO (C.Response SL.ByteString, gen)
 requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man gen = do
   (oax, gen') <- O.freshOa cr gen
   let req = O.sign (oax { P.workflow = P.TemporaryTokenRequest callback }) srv temporaryTokenRequest
@@ -105,9 +113,9 @@ requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man gen = do
 --
 -- Throws 'C.HttpException's.
 requestTemporaryToken
-  :: R.CPRG gen => O.Cred O.Client -> O.Server
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response (Either SL.ByteString (O.Token O.Temporary)), gen)
+  :: R.DRG gen => O.Cred O.Client -> O.Server
+               -> ThreeLegged -> C.Manager -> gen
+               -> IO (C.Response (Either SL.ByteString (O.Token O.Temporary)), gen)
 requestTemporaryToken cr srv tl man gen = do
   (raw, gen') <- requestTemporaryTokenRaw cr srv tl man gen
   return (tryParseToken <$> raw, gen')
@@ -135,10 +143,10 @@ buildAuthorizationUrl cr (ThreeLegged {..}) =
 --
 -- Throws 'C.HttpException's.
 requestPermanentTokenRaw
-  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
-                -> P.Verifier
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response SL.ByteString, gen)
+  :: R.DRG gen => O.Cred O.Temporary -> O.Server
+               -> P.Verifier
+               -> ThreeLegged -> C.Manager -> gen
+               -> IO (C.Response SL.ByteString, gen)
 requestPermanentTokenRaw cr srv verifier (ThreeLegged {..}) man gen = do
   (oax, gen') <- O.freshOa cr gen
   let req = O.sign (oax { P.workflow = P.PermanentTokenRequest verifier }) srv permanentTokenRequest
@@ -149,11 +157,11 @@ requestPermanentTokenRaw cr srv verifier (ThreeLegged {..}) man gen = do
 -- See also 'requestPermanentTokenRaw'.
 --
 -- Throws 'C.HttpException's.
-requestPermanentToken 
-  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
-                -> P.Verifier
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response (Either SL.ByteString (O.Token O.Permanent)), gen)
+requestPermanentToken
+  :: R.DRG gen => O.Cred O.Temporary -> O.Server
+               -> P.Verifier
+               -> ThreeLegged -> C.Manager -> gen
+               -> IO (C.Response (Either SL.ByteString (O.Token O.Permanent)), gen)
 requestPermanentToken cr srv verifier tl man gen = do
   (raw, gen') <- requestPermanentTokenRaw cr srv verifier tl man gen
   return (tryParseToken <$> raw, gen')
@@ -165,15 +173,14 @@ requestPermanentToken cr srv verifier tl man gen = do
 
 -- | Like 'requestTokenProtocol' but allows for specification of the
 -- 'C.ManagerSettings'.
-requestTokenProtocol' 
-  :: C.ManagerSettings -> O.Cred O.Client -> O.Server -> ThreeLegged 
-     -> (URI -> IO P.Verifier) 
+requestTokenProtocol'
+  :: C.ManagerSettings -> O.Cred O.Client -> O.Server -> ThreeLegged
+     -> (URI -> IO P.Verifier)
      -> IO (Maybe (O.Cred O.Permanent))
 requestTokenProtocol' mset cr srv tl getVerifier = do
-  entropy <- R.createEntropyPool
+  gen <- R.drgNew
   E.bracket (C.newManager mset) C.closeManager $ \man -> do
-    let gen = (R.cprgCreate entropy :: R.SystemRNG)
-    (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen 
+    (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen
     case C.responseBody respTempToken of
       Left _ -> return Nothing
       Right tok -> do
@@ -190,9 +197,9 @@ requestTokenProtocol' mset cr srv tl getVerifier = do
 -- will throw a 'C.TlsNotSupported' exception if TLS is required.
 --
 -- Throws 'C.HttpException's.
-requestTokenProtocol 
-  :: O.Cred O.Client -> O.Server -> ThreeLegged 
-     -> (URI -> IO P.Verifier) 
+requestTokenProtocol
+  :: O.Cred O.Client -> O.Server -> ThreeLegged
+     -> (URI -> IO P.Verifier)
      -> IO (Maybe (O.Cred O.Permanent))
 requestTokenProtocol = requestTokenProtocol' C.defaultManagerSettings
 

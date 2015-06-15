@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                        #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
@@ -59,7 +60,14 @@ module Network.OAuth.Simple (
 
   ) where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import qualified Control.Monad.Catch             as E
 import           Control.Monad.Reader
 import           Control.Monad.State
@@ -81,10 +89,10 @@ data OaConfig ty =
 -- | Perform authenticated requests using a shared 'C.Manager' and
 -- a particular set of 'O.Cred's.
 newtype OAuthT ty m a =
-  OAuthT { unOAuthT :: ReaderT (OaConfig ty) (StateT R.SystemRNG m) a }
+  OAuthT { unOAuthT :: ReaderT (OaConfig ty) (StateT R.ChaChaDRG m) a }
   deriving ( Functor, Applicative, Monad
            , MonadReader (OaConfig ty)
-           , MonadState R.SystemRNG
+           , MonadState R.ChaChaDRG
            , E.MonadCatch
            , E.MonadThrow
            , MonadIO
@@ -100,8 +108,8 @@ runOAuthT
      OAuthT ty m a -> O.Cred ty -> O.Server -> O.ThreeLegged ->
      m a
 runOAuthT oat cr srv tl = do
-  entropy <- liftIO R.createEntropyPool
-  evalStateT (runReaderT (unOAuthT oat) (OaConfig cr srv tl)) (R.cprgCreate entropy)
+  gen <- liftIO R.drgNew
+  evalStateT (runReaderT (unOAuthT oat) (OaConfig cr srv tl)) gen
 
 runOAuth :: OAuth ty a -> O.Cred ty -> O.Server -> O.ThreeLegged -> IO a
 runOAuth = runOAuthT
@@ -121,14 +129,14 @@ upgradeCred tok = liftM (Cred.upgradeCred tok . cred) ask
 
 -- | Given a 'Cred.ResourceToken' of some kind, run an inner 'OAuthT' session
 -- with the same configuration but new credentials.
-upgrade :: (Cred.ResourceToken ty', Monad m) => O.Token ty' -> OAuthT ty' m a -> OAuthT ty m a
+upgrade :: (Cred.ResourceToken ty', Monad m, MonadIO m) => O.Token ty' -> OAuthT ty' m a -> OAuthT ty m a
 upgrade tok oat = do
-  gen  <- state R.cprgFork
+  gen  <- liftIO R.drgNew
   conf <- ask
   let conf' = conf { cred = Cred.upgradeCred tok (cred conf) }
   lift $ evalStateT (runReaderT (unOAuthT oat) conf') gen
 
-liftBasic :: MonadIO m => (R.SystemRNG -> OaConfig ty -> IO (a, R.SystemRNG)) -> OAuthT ty m a
+liftBasic :: MonadIO m => (R.ChaChaDRG -> OaConfig ty -> IO (a, R.ChaChaDRG)) -> OAuthT ty m a
 liftBasic f = do
   gen  <- get
   conf <- ask
@@ -195,7 +203,7 @@ requestTokenProtocol man getVerifier = runEitherT $ do
   upgradeE ttok $ do
     verifier <- lift $ buildAuthorizationUrl >>= lift . getVerifier
     permResp <- liftE OnPermanentRequest $ E.try (requestPermanentToken man verifier)
-    ptok     <- upE BadPermanentToken $ C.responseBody permResp 
+    ptok     <- upE BadPermanentToken $ C.responseBody permResp
     lift $ upgradeCred ptok
   where
     -- These functions explain most of the EitherT noise. They're largely
@@ -208,7 +216,7 @@ requestTokenProtocol man getVerifier = runEitherT $ do
     upE      :: (Monad m, Functor m) => (e -> f) -> Either e b -> EitherT f m b
     upE f = liftE f . return
     -- This is just 'upgrade' played out in the EitherT monad.
-    upgradeE :: (Monad m, Cred.ResourceToken ty') =>
+    upgradeE :: (Monad m, MonadIO m, Cred.ResourceToken ty') =>
                 Cred.Token ty'
                 -> EitherT e (OAuthT ty' m) a -> EitherT e (OAuthT ty m) a
     upgradeE tok = EitherT . upgrade tok . runEitherT
