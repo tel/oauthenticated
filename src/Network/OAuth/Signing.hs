@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP               #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TupleSections     #-}
@@ -35,7 +36,14 @@ module Network.OAuth.Signing (
 
   ) where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import qualified Blaze.ByteString.Builder        as Blz
 import           Crypto.Hash                     (SHA1)
 import           Crypto.MAC.HMAC                 (HMAC, hmac)

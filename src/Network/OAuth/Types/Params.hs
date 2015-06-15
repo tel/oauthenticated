@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
@@ -19,7 +20,14 @@
 
 module Network.OAuth.Types.Params where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import           Crypto.Random
 import           Data.ByteArray.Encoding         (Base(Base64), convertToBase)
 import qualified Data.ByteString                 as S

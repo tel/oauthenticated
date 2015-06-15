@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
@@ -30,7 +31,14 @@ module Network.OAuth.ThreeLegged (
   requestTokenProtocol, requestTokenProtocol'
   ) where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import           Control.Exception               as E
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
