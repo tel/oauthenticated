@@ -45,6 +45,7 @@ import           Control.Applicative
 #endif
 
 import qualified Blaze.ByteString.Builder        as Blz
+import           Control.Monad.IO.Class                  (MonadIO)
 import           Crypto.Hash                     (SHA1)
 import           Crypto.MAC.HMAC                 (HMAC, hmac)
 import           Crypto.Random
@@ -66,10 +67,10 @@ import           Network.OAuth.Util
 import           Network.URI
 
 -- | Sign a request with a fresh set of parameters.
-oauth :: DRG gen => Cred ty -> Server -> C.Request -> gen -> IO (C.Request, gen)
-oauth creds sv req gen = do
-  (oax, gen') <- freshOa creds gen
-  return (sign oax sv req, gen')
+oauth :: (MonadIO io, MonadRandom io) => Cred ty -> Server -> C.Request -> io C.Request
+oauth creds sv req = do
+  oax <- freshOa creds
+  return (sign oax sv req)
 
 -- | Sign a request given generated parameters
 sign :: Oa ty -> Server -> C.Request -> C.Request

@@ -70,7 +70,6 @@ import           Control.Applicative
 
 import qualified Control.Monad.Catch             as E
 import           Control.Monad.Reader
-import           Control.Monad.State
 import           Control.Monad.Trans.Either
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
@@ -89,15 +88,14 @@ data OaConfig ty =
 -- | Perform authenticated requests using a shared 'C.Manager' and
 -- a particular set of 'O.Cred's.
 newtype OAuthT ty m a =
-  OAuthT { unOAuthT :: ReaderT (OaConfig ty) (StateT R.ChaChaDRG m) a }
+  OAuthT { unOAuthT :: ReaderT (OaConfig ty) m a }
   deriving ( Functor, Applicative, Monad
            , MonadReader (OaConfig ty)
-           , MonadState R.ChaChaDRG
            , E.MonadCatch
            , E.MonadThrow
            , MonadIO
            )
-instance MonadTrans (OAuthT ty) where lift = OAuthT . lift . lift
+instance MonadTrans (OAuthT ty) where lift = OAuthT . lift
 
 -- | 'OAuthT' wrapped over 'IO'.
 type OAuth ty = OAuthT ty IO
@@ -107,9 +105,8 @@ runOAuthT
   :: (MonadIO m) =>
      OAuthT ty m a -> O.Cred ty -> O.Server -> O.ThreeLegged ->
      m a
-runOAuthT oat cr srv tl = do
-  gen <- liftIO R.drgNew
-  evalStateT (runReaderT (unOAuthT oat) (OaConfig cr srv tl)) gen
+runOAuthT oat cr srv tl =
+  runReaderT (unOAuthT oat) (OaConfig cr srv tl)
 
 runOAuth :: OAuth ty a -> O.Cred ty -> O.Server -> O.ThreeLegged -> IO a
 runOAuth = runOAuthT
@@ -129,24 +126,18 @@ upgradeCred tok = liftM (Cred.upgradeCred tok . cred) ask
 
 -- | Given a 'Cred.ResourceToken' of some kind, run an inner 'OAuthT' session
 -- with the same configuration but new credentials.
-upgrade :: (Cred.ResourceToken ty', Monad m, MonadIO m) => O.Token ty' -> OAuthT ty' m a -> OAuthT ty m a
+upgrade :: (Cred.ResourceToken ty', Monad m, MonadIO m, R.MonadRandom m) => O.Token ty' -> OAuthT ty' m a -> OAuthT ty m a
 upgrade tok oat = do
-  gen  <- liftIO R.drgNew
   conf <- ask
   let conf' = conf { cred = Cred.upgradeCred tok (cred conf) }
-  lift $ evalStateT (runReaderT (unOAuthT oat) conf') gen
+  lift $ runReaderT (unOAuthT oat) conf'
 
-liftBasic :: MonadIO m => (R.ChaChaDRG -> OaConfig ty -> IO (a, R.ChaChaDRG)) -> OAuthT ty m a
-liftBasic f = do
-  gen  <- get
-  conf <- ask
-  (a, gen') <- liftIO (f gen conf)
-  put gen'
-  return a
+liftBasic :: MonadIO m => (OaConfig ty -> IO a) -> OAuthT ty m a
+liftBasic f = ask >>= liftIO . f
 
 -- | Sign a request using fresh credentials.
 oauth :: MonadIO m => C.Request -> OAuthT ty m C.Request
-oauth req = liftBasic $ \gen conf -> O.oauth (cred conf) (server conf) req gen
+oauth req = liftBasic $ \conf -> O.oauth (cred conf) (server conf) req
 
 -- Three-Legged Authorization
 --------------------------------------------------------------------------------
@@ -155,12 +146,11 @@ requestTemporaryToken
   :: MonadIO m => C.Manager ->
      OAuthT O.Client m (C.Response (Either SL.ByteString (O.Token O.Temporary)))
 requestTemporaryToken man =
-  liftBasic $ \gen conf ->
+  liftBasic $ \conf ->
     O.requestTemporaryToken (cred conf)
                             (server conf)
                             (threeLegged conf)
                             man
-                            gen
 
 buildAuthorizationUrl :: Monad m => OAuthT O.Temporary m URI
 buildAuthorizationUrl = do
@@ -171,13 +161,12 @@ requestPermanentToken
   :: MonadIO m => C.Manager -> O.Verifier ->
      OAuthT O.Temporary m (C.Response (Either SL.ByteString (O.Token O.Permanent)))
 requestPermanentToken man ver =
-  liftBasic $ \gen conf ->
+  liftBasic $ \conf ->
     O.requestPermanentToken (cred conf)
                             (server conf)
                             ver
                             (threeLegged conf)
                             man
-                            gen
 
 data TokenRequestFailure =
     OnTemporaryRequest C.HttpException
@@ -191,7 +180,7 @@ data TokenRequestFailure =
 -- "Network.OAuth.ThreeLegged", but offers better error handling due in part to
 -- the easier management of configuration state.
 requestTokenProtocol
-  :: (Functor m, MonadIO m, E.MonadCatch m) =>
+  :: (Functor m, MonadIO m, R.MonadRandom m, E.MonadCatch m) =>
      C.Manager -> (URI -> m O.Verifier) ->
      OAuthT O.Client m (Either TokenRequestFailure (O.Cred O.Permanent))
 requestTokenProtocol man getVerifier = runEitherT $ do
@@ -216,7 +205,7 @@ requestTokenProtocol man getVerifier = runEitherT $ do
     upE      :: (Monad m, Functor m) => (e -> f) -> Either e b -> EitherT f m b
     upE f = liftE f . return
     -- This is just 'upgrade' played out in the EitherT monad.
-    upgradeE :: (Monad m, MonadIO m, Cred.ResourceToken ty') =>
+    upgradeE :: (Monad m, MonadIO m, R.MonadRandom m, Cred.ResourceToken ty') =>
                 Cred.Token ty'
                 -> EitherT e (OAuthT ty' m) a -> EitherT e (OAuthT ty m) a
     upgradeE tok = EitherT . upgrade tok . runEitherT

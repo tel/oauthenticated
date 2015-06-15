@@ -1,6 +1,7 @@
-{-# LANGUAGE CPP                #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      : Network.OAuth.Types.Params
@@ -28,6 +29,7 @@ module Network.OAuth.Types.Params where
 import           Control.Applicative
 #endif
 
+import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import           Crypto.Random
 import           Data.ByteArray.Encoding         (Base(Base64), convertToBase)
 import qualified Data.ByteString                 as S
@@ -186,19 +188,12 @@ emptyPin = OaPin { timestamp = Timestamp (UTCTime (ModifiedJulianDay 0) 0)
 
 -- | Creates a new, unique, unpredictable 'OaPin'. This should be used quickly
 -- as dependent on the OAuth server settings it may expire.
-freshPin :: DRG gen => gen -> IO (OaPin, gen)
-freshPin gen = do
-  t <- Timestamp <$> getCurrentTime
-  return (OaPin { timestamp = t, nonce = n }, gen')
+freshPin :: forall io . (MonadIO io, MonadRandom io) => io OaPin
+freshPin = do
+  t <- liftIO $ Timestamp <$> getCurrentTime
+  n <- convertToBase Base64 <$> (getRandomBytes 8 :: io S8.ByteString)
+  return OaPin { timestamp = t, nonce = n }
   where
-    (n, gen') = withRandomBytes gen 8 (convertToBase Base64)
-
--- | generate @len random bytes and mapped the bytes to the function @f.
---
--- This is equivalent to use Control.Arrow 'first' with 'randomBytesGenerate'
-withRandomBytes :: DRG g => g -> Int -> (S.ByteString -> a) -> (a, g)
-withRandomBytes rng len f = (f bs, rng')
-  where (bs, rng') = randomBytesGenerate len rng
 
 -- | Uses 'emptyPin' to create an empty set of params 'Oa'.
 emptyOa :: Cred ty -> Oa ty
@@ -206,10 +201,10 @@ emptyOa creds =
   Oa { credentials = creds, workflow = Standard, pin = emptyPin }
 
 -- | Uses 'freshPin' to create a fresh, default set of params 'Oa'.
-freshOa :: DRG gen => Cred ty -> gen -> IO (Oa ty, gen)
-freshOa creds gen = do
-  (pinx, gen') <- freshPin gen
-  return (Oa { credentials = creds, workflow = Standard, pin = pinx }, gen')
+freshOa :: (MonadIO io, MonadRandom io) => Cred ty -> io (Oa ty)
+freshOa creds = do
+  pinx <- freshPin
+  return Oa { credentials = creds, workflow = Standard, pin = pinx }
 
 -- | The 'Oa' parameters include all the OAuth information specific to a single
 -- request. They are not sufficient information by themselves to generate the
