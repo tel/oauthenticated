@@ -189,9 +189,9 @@ requestTokenProtocol' mset cr srv tl getVerifier = do
 -- will throw a 'C.TlsNotSupported' exception if TLS is required.
 --
 -- Throws 'C.HttpException's.
-requestTokenProtocol 
-  :: O.Cred O.Client -> O.Server -> ThreeLegged 
-     -> (URI -> IO P.Verifier) 
+requestTokenProtocol
+  :: O.Cred O.Client -> O.Server -> ThreeLegged
+     -> (URI -> IO P.Verifier)
      -> IO (Maybe (O.Cred O.Permanent))
 requestTokenProtocol = requestTokenProtocol' C.defaultManagerSettings
 

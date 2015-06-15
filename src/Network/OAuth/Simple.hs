@@ -195,7 +195,7 @@ requestTokenProtocol man getVerifier = runEitherT $ do
   upgradeE ttok $ do
     verifier <- lift $ buildAuthorizationUrl >>= lift . getVerifier
     permResp <- liftE OnPermanentRequest $ E.try (requestPermanentToken man verifier)
-    ptok     <- upE BadPermanentToken $ C.responseBody permResp 
+    ptok     <- upE BadPermanentToken $ C.responseBody permResp
     lift $ upgradeCred ptok
   where
     -- These functions explain most of the EitherT noise. They're largely

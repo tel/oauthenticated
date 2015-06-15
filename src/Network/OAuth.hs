@@ -38,14 +38,14 @@ module Network.OAuth (
   -- a fresh set of 'O.Oa' parameters from a relevant or deterministic
   -- 'O.OaPin' and then using 'S.sign' to sign the 'C.Request'.
   S.sign,
-  
+
   -- ** Generating OAuth parameters
-  O.emptyOa, O.freshOa, O.emptyPin, O.freshPin, 
+  O.emptyOa, O.freshOa, O.emptyPin, O.freshPin,
 
   -- * OAuth Credentials
   O.Token (..), O.Cred, O.Client, O.Temporary, O.Permanent,
 
-  -- ** Creating Credentials  
+  -- ** Creating Credentials
   O.clientCred, O.temporaryCred, O.permanentCred,
   O.fromUrlEncoded,
 
