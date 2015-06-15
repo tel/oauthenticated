@@ -62,11 +62,11 @@ import qualified Network.OAuth.Types.Credentials as O
 import qualified Network.OAuth.Types.Params      as O
 
 -- | Sign a request with a fresh set of parameters. Creates a fresh
--- 'R.SystemRNG' using new entropy for each signing and thus is potentially
+-- 'R.ChaChaDRG' using new entropy for each signing and thus is potentially
 -- /dangerous/ if used too frequently. In almost all cases, 'S.oauth'
 -- should be used instead.
 oauthSimple :: O.Cred ty -> O.Server -> C.Request -> IO C.Request
 oauthSimple cr srv req = do
-  entropy   <- R.createEntropyPool
-  (req', _) <- S.oauth cr srv req (R.cprgCreate entropy :: R.SystemRNG)
+  entropy   <- R.drgNew
+  (req', _) <- S.oauth cr srv req entropy
   return req'
