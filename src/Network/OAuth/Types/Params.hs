@@ -1,5 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE OverloadedStrings  #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
 -- Module      : Network.OAuth.Types.Params
@@ -19,10 +21,18 @@
 
 module Network.OAuth.Types.Params where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
+import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import           Crypto.Random
+import           Data.ByteArray.Encoding         (Base(Base64), convertToBase)
 import qualified Data.ByteString                 as S
-import qualified Data.ByteString.Base64          as S64
 import qualified Data.ByteString.Char8           as S8
 import           Data.Data
 import           Data.Time
@@ -178,12 +188,12 @@ emptyPin = OaPin { timestamp = Timestamp (UTCTime (ModifiedJulianDay 0) 0)
 
 -- | Creates a new, unique, unpredictable 'OaPin'. This should be used quickly
 -- as dependent on the OAuth server settings it may expire.
-freshPin :: CPRG gen => gen -> IO (OaPin, gen)
-freshPin gen = do
-  t <- Timestamp <$> getCurrentTime
-  return (OaPin { timestamp = t, nonce = n }, gen')
+freshPin :: forall io . (MonadIO io, MonadRandom io) => io OaPin
+freshPin = do
+  t <- liftIO $ Timestamp <$> getCurrentTime
+  n <- convertToBase Base64 <$> (getRandomBytes 8 :: io S8.ByteString)
+  return OaPin { timestamp = t, nonce = n }
   where
-    (n, gen') = withRandomBytes gen 8 S64.encode
 
 -- | Uses 'emptyPin' to create an empty set of params 'Oa'.
 emptyOa :: Cred ty -> Oa ty
@@ -191,10 +201,10 @@ emptyOa creds =
   Oa { credentials = creds, workflow = Standard, pin = emptyPin }
 
 -- | Uses 'freshPin' to create a fresh, default set of params 'Oa'.
-freshOa :: CPRG gen => Cred ty -> gen -> IO (Oa ty, gen)
-freshOa creds gen = do
-  (pinx, gen') <- freshPin gen
-  return (Oa { credentials = creds, workflow = Standard, pin = pinx }, gen')
+freshOa :: (MonadIO io, MonadRandom io) => Cred ty -> io (Oa ty)
+freshOa creds = do
+  pinx <- freshPin
+  return Oa { credentials = creds, workflow = Standard, pin = pinx }
 
 -- | The 'Oa' parameters include all the OAuth information specific to a single
 -- request. They are not sufficient information by themselves to generate the

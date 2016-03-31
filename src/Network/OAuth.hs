@@ -29,7 +29,7 @@ module Network.OAuth (
   -- function should be used which allows for threading of the random
   -- source.
   --
-  oauthSimple, S.oauth,
+  S.oauth,
 
   -- * Lower-level and pure functionality
   --
@@ -38,14 +38,14 @@ module Network.OAuth (
   -- a fresh set of 'O.Oa' parameters from a relevant or deterministic
   -- 'O.OaPin' and then using 'S.sign' to sign the 'C.Request'.
   S.sign,
-  
+
   -- ** Generating OAuth parameters
-  O.emptyOa, O.freshOa, O.emptyPin, O.freshPin, 
+  O.emptyOa, O.freshOa, O.emptyPin, O.freshPin,
 
   -- * OAuth Credentials
   O.Token (..), O.Cred, O.Client, O.Temporary, O.Permanent,
 
-  -- ** Creating Credentials  
+  -- ** Creating Credentials
   O.clientCred, O.temporaryCred, O.permanentCred,
   O.fromUrlEncoded,
 
@@ -55,18 +55,6 @@ module Network.OAuth (
 
   ) where
 
-import qualified Crypto.Random                   as R
-import qualified Network.HTTP.Client             as C
 import qualified Network.OAuth.Signing           as S
 import qualified Network.OAuth.Types.Credentials as O
 import qualified Network.OAuth.Types.Params      as O
-
--- | Sign a request with a fresh set of parameters. Creates a fresh
--- 'R.SystemRNG' using new entropy for each signing and thus is potentially
--- /dangerous/ if used too frequently. In almost all cases, 'S.oauth'
--- should be used instead.
-oauthSimple :: O.Cred ty -> O.Server -> C.Request -> IO C.Request
-oauthSimple cr srv req = do
-  entropy   <- R.createEntropyPool
-  (req', _) <- S.oauth cr srv req (R.cprgCreate entropy :: R.SystemRNG)
-  return req'

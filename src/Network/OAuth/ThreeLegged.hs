@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE RecordWildCards    #-}
@@ -30,8 +31,16 @@ module Network.OAuth.ThreeLegged (
   requestTokenProtocol, requestTokenProtocol'
   ) where
 
+#ifndef MIN_VERSION_base
+#define MIN_VERSION_base(x,y,z) 1
+#endif
+
+#if !MIN_VERSION_base(4,8,0)
 import           Control.Applicative
+#endif
+
 import           Control.Exception               as E
+import           Control.Monad.IO.Class          (MonadIO, liftIO)
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Data
@@ -89,14 +98,13 @@ parseThreeLegged a b c d =
 --
 -- Throws 'C.HttpException's.
 requestTemporaryTokenRaw
-  :: R.CPRG gen => O.Cred O.Client -> O.Server
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response SL.ByteString, gen)
-requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man gen = do
-  (oax, gen') <- O.freshOa cr gen
+  :: (MonadIO io, R.MonadRandom io)
+  => O.Cred O.Client -> O.Server -> ThreeLegged -> C.Manager
+  -> io (C.Response SL.ByteString)
+requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man = do
+  oax <- O.freshOa cr
   let req = O.sign (oax { P.workflow = P.TemporaryTokenRequest callback }) srv temporaryTokenRequest
-  lbs <- C.httpLbs req man
-  return (lbs, gen')
+  liftIO $ C.httpLbs req man
 
 -- | Returns the raw result if the 'C.Response' could not be parsed as
 -- a valid 'O.Token'.  Importantly, in RFC 5849 compliant modes this
@@ -105,12 +113,12 @@ requestTemporaryTokenRaw cr srv (ThreeLegged {..}) man gen = do
 --
 -- Throws 'C.HttpException's.
 requestTemporaryToken
-  :: R.CPRG gen => O.Cred O.Client -> O.Server
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response (Either SL.ByteString (O.Token O.Temporary)), gen)
-requestTemporaryToken cr srv tl man gen = do
-  (raw, gen') <- requestTemporaryTokenRaw cr srv tl man gen
-  return (tryParseToken <$> raw, gen')
+  :: (MonadIO io, R.MonadRandom io)
+  => O.Cred O.Client -> O.Server -> ThreeLegged -> C.Manager
+  -> io (C.Response (Either SL.ByteString (O.Token O.Temporary)))
+requestTemporaryToken cr srv tl man = do
+  raw <- requestTemporaryTokenRaw cr srv tl man
+  return (tryParseToken <$> raw)
   where
     tryParseToken lbs = case maybeParseToken lbs of
       Nothing  -> Left lbs
@@ -135,28 +143,25 @@ buildAuthorizationUrl cr (ThreeLegged {..}) =
 --
 -- Throws 'C.HttpException's.
 requestPermanentTokenRaw
-  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
-                -> P.Verifier
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response SL.ByteString, gen)
-requestPermanentTokenRaw cr srv verifier (ThreeLegged {..}) man gen = do
-  (oax, gen') <- O.freshOa cr gen
+  :: (MonadIO io, R.MonadRandom io)
+  => O.Cred O.Temporary -> O.Server -> P.Verifier -> ThreeLegged -> C.Manager
+  -> io (C.Response SL.ByteString)
+requestPermanentTokenRaw cr srv verifier (ThreeLegged {..}) man = do
+  oax <- O.freshOa cr
   let req = O.sign (oax { P.workflow = P.PermanentTokenRequest verifier }) srv permanentTokenRequest
-  lbs <- C.httpLbs req man
-  return (lbs, gen')
+  liftIO $ C.httpLbs req man
 
 -- | Returns 'Nothing' if the response could not be decoded as a 'Token'.
 -- See also 'requestPermanentTokenRaw'.
 --
 -- Throws 'C.HttpException's.
-requestPermanentToken 
-  :: R.CPRG gen => O.Cred O.Temporary -> O.Server
-                -> P.Verifier
-                -> ThreeLegged -> C.Manager -> gen
-                -> IO (C.Response (Either SL.ByteString (O.Token O.Permanent)), gen)
-requestPermanentToken cr srv verifier tl man gen = do
-  (raw, gen') <- requestPermanentTokenRaw cr srv verifier tl man gen
-  return (tryParseToken <$> raw, gen')
+requestPermanentToken
+  :: (MonadIO io, R.MonadRandom io)
+  => O.Cred O.Temporary -> O.Server -> P.Verifier -> ThreeLegged -> C.Manager
+  -> io (C.Response (Either SL.ByteString (O.Token O.Permanent)))
+requestPermanentToken cr srv verifier tl man = do
+  raw <- requestPermanentTokenRaw cr srv verifier tl man
+  return (tryParseToken <$> raw)
   where
     tryParseToken lbs = case maybeParseToken lbs of
       Nothing  -> Left lbs
@@ -165,21 +170,19 @@ requestPermanentToken cr srv verifier tl man gen = do
 
 -- | Like 'requestTokenProtocol' but allows for specification of the
 -- 'C.ManagerSettings'.
-requestTokenProtocol' 
-  :: C.ManagerSettings -> O.Cred O.Client -> O.Server -> ThreeLegged 
-     -> (URI -> IO P.Verifier) 
+requestTokenProtocol'
+  :: C.ManagerSettings -> O.Cred O.Client -> O.Server -> ThreeLegged
+     -> (URI -> IO P.Verifier)
      -> IO (Maybe (O.Cred O.Permanent))
-requestTokenProtocol' mset cr srv tl getVerifier = do
-  entropy <- R.createEntropyPool
+requestTokenProtocol' mset cr srv tl getVerifier =
   E.bracket (C.newManager mset) C.closeManager $ \man -> do
-    let gen = (R.cprgCreate entropy :: R.SystemRNG)
-    (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen 
+    respTempToken <- requestTemporaryToken cr srv tl man
     case C.responseBody respTempToken of
       Left _ -> return Nothing
       Right tok -> do
         let tempCr = O.temporaryCred tok cr
         verifier <- getVerifier $ buildAuthorizationUrl tempCr tl
-        (respPermToken, _) <- requestPermanentToken tempCr srv verifier tl man gen'
+        respPermToken <- requestPermanentToken tempCr srv verifier tl man
         case C.responseBody respPermToken of
           Left _ -> return Nothing
           Right tok' -> return (Just $ O.permanentCred tok' cr)
@@ -190,9 +193,9 @@ requestTokenProtocol' mset cr srv tl getVerifier = do
 -- will throw a 'C.TlsNotSupported' exception if TLS is required.
 --
 -- Throws 'C.HttpException's.
-requestTokenProtocol 
-  :: O.Cred O.Client -> O.Server -> ThreeLegged 
-     -> (URI -> IO P.Verifier) 
+requestTokenProtocol
+  :: O.Cred O.Client -> O.Server -> ThreeLegged
+     -> (URI -> IO P.Verifier)
      -> IO (Maybe (O.Cred O.Permanent))
 requestTokenProtocol = requestTokenProtocol' C.defaultManagerSettings
 

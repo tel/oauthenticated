@@ -110,8 +110,8 @@ instance FromJSON (Token ty) where
 -- | Produces a JSON object using keys named @oauth_token@ and
 -- @oauth_token_secret@.
 instance ToJSON (Token ty) where
-  toJSON (Token k s) = object [ "oauth_token"        .= (decodeLatin1 k)
-                              , "oauth_token_secret" .= (decodeLatin1 s)
+  toJSON (Token k s) = object [ "oauth_token"        .= decodeLatin1 k
+                              , "oauth_token_secret" .= decodeLatin1 s
                               ]
 
 -- | Parses a @www-form-urlencoded@ stream to produce a 'Token' if possible.
