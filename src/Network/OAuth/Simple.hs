@@ -59,11 +59,10 @@ module Network.OAuth.Simple (
 
   ) where
 
-import           Control.Applicative
 import qualified Control.Monad.Catch             as E
 import           Control.Monad.Reader
 import           Control.Monad.State
-import           Control.Monad.Trans.Either
+import           Control.Monad.Trans.Except
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
 import qualified Network.HTTP.Client             as C
@@ -186,29 +185,20 @@ requestTokenProtocol
   :: (Functor m, MonadIO m, E.MonadCatch m) =>
      C.Manager -> (URI -> m O.Verifier) ->
      OAuthT O.Client m (Either TokenRequestFailure (O.Cred O.Permanent))
-requestTokenProtocol man getVerifier = runEitherT $ do
+requestTokenProtocol man getVerifier = runExceptT $ do
   -- Most of the code here is very simple, except that it does a LOT of
   -- exception lifting. Try to ignore the EitherT noise on the left side
   -- of each line.
-  tempResp <- liftE OnTemporaryRequest $ E.try (requestTemporaryToken man)
-  ttok     <- upE BadTemporaryToken $ C.responseBody tempResp
+  tempResp <- withExceptT OnTemporaryRequest $ ExceptT $ E.try (requestTemporaryToken man)
+  ttok     <- withExceptT BadTemporaryToken $ ExceptT $ pure $ C.responseBody tempResp
   upgradeE ttok $ do
     verifier <- lift $ buildAuthorizationUrl >>= lift . getVerifier
-    permResp <- liftE OnPermanentRequest $ E.try (requestPermanentToken man verifier)
-    ptok     <- upE BadPermanentToken $ C.responseBody permResp 
+    permResp <- withExceptT OnPermanentRequest $ ExceptT $ E.try (requestPermanentToken man verifier)
+    ptok     <- withExceptT BadPermanentToken $ ExceptT $ pure $ C.responseBody permResp
     lift $ upgradeCred ptok
   where
-    -- These functions explain most of the EitherT noise. They're largely
-    -- useful for lifting default EitherT responses up into the error type
-    -- we want.
-    mapE     :: Functor m => (e -> f) -> EitherT e m b -> EitherT f m b
-    mapE f = bimapEitherT f id
-    liftE    :: Functor m => (e -> f) -> m (Either e b) -> EitherT f m b
-    liftE f = mapE f . EitherT
-    upE      :: (Monad m, Functor m) => (e -> f) -> Either e b -> EitherT f m b
-    upE f = liftE f . return
     -- This is just 'upgrade' played out in the EitherT monad.
     upgradeE :: (Monad m, Cred.ResourceToken ty') =>
                 Cred.Token ty'
-                -> EitherT e (OAuthT ty' m) a -> EitherT e (OAuthT ty m) a
-    upgradeE tok = EitherT . upgrade tok . runEitherT
+                -> ExceptT e (OAuthT ty' m) a -> ExceptT e (OAuthT ty m) a
+    upgradeE tok = ExceptT . upgrade tok . runExceptT

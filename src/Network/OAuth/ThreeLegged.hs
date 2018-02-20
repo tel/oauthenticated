@@ -30,8 +30,6 @@ module Network.OAuth.ThreeLegged (
   requestTokenProtocol, requestTokenProtocol'
   ) where
 
-import           Control.Applicative
-import           Control.Exception               as E
 import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
 import           Data.Data
@@ -78,9 +76,9 @@ data ThreeLegged =
 -- callback URLs could not be parsed correctly.
 parseThreeLegged :: String -> String -> String -> P.Callback -> Maybe ThreeLegged
 parseThreeLegged a b c d =
-  ThreeLegged <$> C.parseUrl a
-              <*> C.parseUrl b
-              <*> C.parseUrl c
+  ThreeLegged <$> C.parseRequest a
+              <*> C.parseRequest b
+              <*> C.parseRequest c
               <*> pure d
 
 -- | Request a 'Temporary' 'Token' based on the parameters of
@@ -171,18 +169,18 @@ requestTokenProtocol'
      -> IO (Maybe (O.Cred O.Permanent))
 requestTokenProtocol' mset cr srv tl getVerifier = do
   entropy <- R.createEntropyPool
-  E.bracket (C.newManager mset) C.closeManager $ \man -> do
-    let gen = (R.cprgCreate entropy :: R.SystemRNG)
-    (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen 
-    case C.responseBody respTempToken of
-      Left _ -> return Nothing
-      Right tok -> do
-        let tempCr = O.temporaryCred tok cr
-        verifier <- getVerifier $ buildAuthorizationUrl tempCr tl
-        (respPermToken, _) <- requestPermanentToken tempCr srv verifier tl man gen'
-        case C.responseBody respPermToken of
-          Left _ -> return Nothing
-          Right tok' -> return (Just $ O.permanentCred tok' cr)
+  man <- C.newManager mset
+  let gen = (R.cprgCreate entropy :: R.SystemRNG)
+  (respTempToken, gen') <- requestTemporaryToken cr srv tl man gen 
+  case C.responseBody respTempToken of
+    Left _ -> return Nothing
+    Right tok -> do
+      let tempCr = O.temporaryCred tok cr
+      verifier <- getVerifier $ buildAuthorizationUrl tempCr tl
+      (respPermToken, _) <- requestPermanentToken tempCr srv verifier tl man gen'
+      case C.responseBody respPermToken of
+        Left _ -> return Nothing
+        Right tok' -> return (Just $ O.permanentCred tok' cr)
 
 -- | Performs an interactive token request provided credentials,
 -- configuration, and a way to convert a user authorization 'URI' into

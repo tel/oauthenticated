@@ -21,7 +21,6 @@ module Network.OAuth.MuLens (
   (<&>), (&), (^.), (.~), (%~),
   ) where
 
-import           Control.Applicative
 import           Data.Functor.Identity
 import           Data.Functor.Constant
 

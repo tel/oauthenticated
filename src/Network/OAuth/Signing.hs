@@ -36,7 +36,6 @@ module Network.OAuth.Signing (
   ) where
 
 import qualified Blaze.ByteString.Builder        as Blz
-import           Control.Applicative
 import           Crypto.Hash.SHA1                (hash)
 import           Crypto.MAC.HMAC                 (hmac)
 import           Crypto.Random
@@ -145,16 +144,17 @@ oauthParams (Oa {..}) (Server {..}) =
 
     workflowParams Standard = []
     workflowParams (TemporaryTokenRequest callback) =
-      [ "oauth_callback" -: callback ]
+      [ "oauth_callback" -: callback
+      , "oauth_token" -: (getResourceTokenDef credentials ^. key) ]
     workflowParams (PermanentTokenRequest verifier) =
-      [ "oauth_verifier" -: verifier ]
+      [ "oauth_verifier" -: verifier
+      , "oauth_token" -: (getResourceTokenDef credentials ^. key) ]
 
   in
 
     [ "oauth_version"          -: oAuthVersion
     , "oauth_consumer_key"     -: (credentials ^. clientToken . key)
     , "oauth_signature_method" -: signatureMethod
-    , "oauth_token"            -: (getResourceTokenDef credentials ^. key)
     , "oauth_timestamp"        -: timestamp
     , "oauth_nonce"            -: nonce
     ] ++ workflowParams workflow
@@ -174,8 +174,8 @@ canonicalUri req =
 
 -- | Queries a 'C.Request' body and tries to interpret it as a set of OAuth
 -- valid parameters. It makes the assumption that if the body type is a
--- streaming variety then it is /not/ a set of OAuth parameters---dropping this
--- assumption would prevent this from being pure.
+-- streaming variety or impure then it is /not/ a set of OAuth parameters---
+-- dropping this assumption would prevent this from being pure.
 bodyParams :: C.Request -> H.Query
 bodyParams = digestBody . C.requestBody where
   digestBody :: C.RequestBody -> H.Query
@@ -184,6 +184,7 @@ bodyParams = digestBody . C.requestBody where
   digestBody (C.RequestBodyBuilder _ b) = H.parseQuery (Blz.toByteString b)
   digestBody (C.RequestBodyStream  _ _) = []
   digestBody (C.RequestBodyStreamChunked _) = []
+  digestBody (C.RequestBodyIO _) = []
 
   -- digestBody (Left (_, builder)) = H.parseQuery (Blz.toByteString builder)
   -- digestBody (Right _) = []
