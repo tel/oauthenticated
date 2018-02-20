@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 32a52e0b20beac3ece0da25c5f01e324fd51005766afed12e9d4a1d0a94cf4d5
+-- hash: 2b92ef5e48fb8555a15a1dbc375ba963131cabd562006cd071b843ae09a5fd59
 
 name:           oauthenticated
 version:        0.2.0.0
@@ -62,7 +62,6 @@ library
     , case-insensitive
     , crypto-random
     , cryptohash
-    , either
     , exceptions
     , http-client
     , http-types

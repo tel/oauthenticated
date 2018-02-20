@@ -51,7 +51,6 @@ dependencies:
   - case-insensitive
   - crypto-random
   - cryptohash
-  - either
   - exceptions
   - http-client
   - http-types

@@ -4,8 +4,8 @@
 
 env:
  - ARGS=""
- - ARGS="--resolver lts"
  - ARGS="--resolver nightly"
+ - ARGS="--resolver lts"
  - ARGS="--resolver lts-8"
  - ARGS="--resolver lts-7"
  - ARGS="--resolver lts-6"
