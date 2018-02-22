@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/tel/oauthenticated.svg?branch=master)](https://travis-ci.org/tel/oauthenticated)
+
 # Oh! Authenticated!
 
   OAuth is a popular protocol allowing servers to offer resources
