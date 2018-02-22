@@ -7,7 +7,7 @@ env:
  - ARGS="--resolver nightly"
  - ARGS="--resolver lts"
  - ARGS="--resolver lts-8"
- - ARGS="--resolver lts-7"
+ - ARGS="--resolver lts-7 --ghc-options -Wno-redundant-constraints"
  - ARGS="--resolver lts-6"
 
 matrix:

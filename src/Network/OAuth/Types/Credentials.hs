@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-redundant-constraints -fno-warn-incomplete-patterns #-}
+{-# OPTIONS_GHC -fno-warn-incomplete-patterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE OverloadedStrings  #-}
 
