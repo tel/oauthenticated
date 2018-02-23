@@ -142,6 +142,16 @@ oauthParams (Oa {..}) (Server {..}) =
     infix 8 -:
     s -: v = (s, H.toQueryValue v)
 
+    -- **NOTE** dfithian: It worked for my use case to move oauth_token into these params. From the
+    -- PR:
+    --
+    -- I presume one very controversial thing I did was to move `oauth_token` into `workflowParams`.
+    -- I came to this conclusion by skimming through the [RFC](https://tools.ietf.org/html/rfc5849)
+    -- and deciding that since I only ever saw `oauth_token` in conjunction with either
+    -- `oauth_callback` or `oauth_verifier` that they should go together. I'd be perfectly happy to
+    -- instead pass in some function of the settings telling it whether or not to include
+    -- `oauth_token` for a given request. Whatever the conclusion, the service I'm integrating to
+    -- specifically does NOT want the `oauth_token` so that was the motivation.
     workflowParams Standard = []
     workflowParams (TemporaryTokenRequest callback) =
       [ "oauth_callback" -: callback
