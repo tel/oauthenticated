@@ -19,7 +19,6 @@
 
 module Network.OAuth.Types.Params where
 
-import           Control.Applicative
 import           Crypto.Random
 import qualified Data.ByteString                 as S
 import qualified Data.ByteString.Base64          as S64

@@ -36,7 +36,6 @@ module Network.OAuth.Signing (
   ) where
 
 import qualified Blaze.ByteString.Builder        as Blz
-import           Control.Applicative
 import           Crypto.Hash.SHA1                (hash)
 import           Crypto.MAC.HMAC                 (hmac)
 import           Crypto.Random
@@ -143,18 +142,29 @@ oauthParams (Oa {..}) (Server {..}) =
     infix 8 -:
     s -: v = (s, H.toQueryValue v)
 
+    -- **NOTE** dfithian: It worked for my use case to move oauth_token into these params. From the
+    -- PR:
+    --
+    -- I presume one very controversial thing I did was to move `oauth_token` into `workflowParams`.
+    -- I came to this conclusion by skimming through the [RFC](https://tools.ietf.org/html/rfc5849)
+    -- and deciding that since I only ever saw `oauth_token` in conjunction with either
+    -- `oauth_callback` or `oauth_verifier` that they should go together. I'd be perfectly happy to
+    -- instead pass in some function of the settings telling it whether or not to include
+    -- `oauth_token` for a given request. Whatever the conclusion, the service I'm integrating to
+    -- specifically does NOT want the `oauth_token` so that was the motivation.
     workflowParams Standard = []
     workflowParams (TemporaryTokenRequest callback) =
-      [ "oauth_callback" -: callback ]
+      [ "oauth_callback" -: callback
+      , "oauth_token" -: (getResourceTokenDef credentials ^. key) ]
     workflowParams (PermanentTokenRequest verifier) =
-      [ "oauth_verifier" -: verifier ]
+      [ "oauth_verifier" -: verifier
+      , "oauth_token" -: (getResourceTokenDef credentials ^. key) ]
 
   in
 
     [ "oauth_version"          -: oAuthVersion
     , "oauth_consumer_key"     -: (credentials ^. clientToken . key)
     , "oauth_signature_method" -: signatureMethod
-    , "oauth_token"            -: (getResourceTokenDef credentials ^. key)
     , "oauth_timestamp"        -: timestamp
     , "oauth_nonce"            -: nonce
     ] ++ workflowParams workflow
@@ -174,8 +184,8 @@ canonicalUri req =
 
 -- | Queries a 'C.Request' body and tries to interpret it as a set of OAuth
 -- valid parameters. It makes the assumption that if the body type is a
--- streaming variety then it is /not/ a set of OAuth parameters---dropping this
--- assumption would prevent this from being pure.
+-- streaming variety or impure then it is /not/ a set of OAuth parameters---
+-- dropping this assumption would prevent this from being pure.
 bodyParams :: C.Request -> H.Query
 bodyParams = digestBody . C.requestBody where
   digestBody :: C.RequestBody -> H.Query
@@ -184,6 +194,7 @@ bodyParams = digestBody . C.requestBody where
   digestBody (C.RequestBodyBuilder _ b) = H.parseQuery (Blz.toByteString b)
   digestBody (C.RequestBodyStream  _ _) = []
   digestBody (C.RequestBodyStreamChunked _) = []
+  digestBody (C.RequestBodyIO _) = []
 
   -- digestBody (Left (_, builder)) = H.parseQuery (Blz.toByteString builder)
   -- digestBody (Right _) = []
