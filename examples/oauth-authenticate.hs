@@ -28,19 +28,20 @@ data Opts = Opts
   }
 
 data App = App
-  { appRng     :: TVar Crypto.SystemRNG
+  { appRng     :: MVar Crypto.SystemRNG
   , appManager :: Client.Manager
   , appServer  :: OAuth.Server
   , appCred    :: OAuth.Cred OAuth.Client
   }
 
+signRequest :: App -> Client.Request -> IO Client.Request
+signRequest App {..} req =
+  modifyMVar appRng $ map swap . OAuth.oauth appCred appServer req
+
 makeRequest :: FromJSON a => App -> Client.Request -> IO a
 makeRequest App {..} req = do
-  rng <- readTVarIO appRng
-  (signedReq, newRng) <- OAuth.oauth appCred appServer req rng
-  atomically $ writeTVar appRng newRng
-  putStrLn $ tshow signedReq
-  resp <- Client.httpLbs signedReq appManager
+  putStrLn $ tshow req
+  resp <- Client.httpLbs req appManager
   putStrLn $ tshow resp
   either (\ msg -> fail $ "Couldn't decode " <> show resp <> " due to " <> msg) pure $
     eitherDecodeStrict' (toStrict $ Client.responseBody resp)
@@ -58,9 +59,9 @@ main = do
   Opts {..} <- parseArgs
   req <- Client.parseRequest oauthUrl
   rng <- Crypto.cprgCreate <$> Crypto.createEntropyPool
-  rngTv <- newTVarIO rng
+  rngMv <- newMVar rng
   manager <- Client.newManager Client.defaultManagerSettings
   let cred = OAuth.clientCred $ OAuth.Token oauthKey oauthSecret
-      app = App rngTv manager OAuth.defaultServer cred
-  _ :: Value <- makeRequest app req
+      app = App rngMv manager OAuth.defaultServer cred
+  _ :: Value <- makeRequest app =<< signRequest app req
   pure ()
