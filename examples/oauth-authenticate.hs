@@ -2,6 +2,7 @@
 {- stack --resolver lts-10.4 --install-ghc runghc --package classy-prelude --package http-client --package crypto-random --package oauthenticated --package uri-templater -}
 {-# OPTIONS_GHC -Wall -Werror           #-}
 {-# LANGUAGE DataKinds                  #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NoImplicitPrelude          #-}
 {-# LANGUAGE OverloadedStrings          #-}
@@ -16,6 +17,7 @@
 import ClassyPrelude
 import qualified "crypto-random" Crypto.Random as Crypto
 import Data.Aeson (FromJSON, Value, eitherDecodeStrict')
+import Control.Monad.RWS (MonadRWS, evalRWST, get, put)
 import qualified Data.ByteString.Char8 as Char8
 import qualified Network.HTTP.Client as Client
 import qualified Network.OAuth as OAuth
@@ -28,23 +30,37 @@ data Opts = Opts
   }
 
 data App = App
-  { appRng     :: MVar Crypto.SystemRNG
-  , appManager :: Client.Manager
+  { appManager :: Client.Manager
   , appServer  :: OAuth.Server
   , appCred    :: OAuth.Cred OAuth.Client
   }
 
-signRequest :: App -> Client.Request -> IO Client.Request
-signRequest App {..} req =
-  modifyMVar appRng $ map swap . OAuth.oauth appCred appServer req
+-- |Update MonadRWS state
+underRWS :: MonadRWS r w s m => (r -> s -> m (a, s)) -> m a
+underRWS f = do
+  r <- ask
+  s <- get
+  (x, newS) <- f r s
+  put newS
+  pure x
 
-makeRequest :: FromJSON a => App -> Client.Request -> IO a
-makeRequest App {..} req = do
-  putStrLn $ tshow req
-  resp <- Client.httpLbs req appManager
-  putStrLn $ tshow resp
-  either (\ msg -> fail $ "Couldn't decode " <> show resp <> " due to " <> msg) pure $
-    eitherDecodeStrict' (toStrict $ Client.responseBody resp)
+-- |Sign a request. Obviously not super safe since it operates in State monad and operations are not
+-- atomic.
+signRequest :: (MonadIO m, MonadRWS App () Crypto.SystemRNG m)
+  => Client.Request -> m Client.Request
+signRequest req = underRWS $ \ App {..} rng ->
+  liftIO $ OAuth.oauth appCred appServer req rng
+
+makeRequest :: (FromJSON a, MonadIO m, MonadRWS App () Crypto.SystemRNG m)
+  => Client.Request -> m a
+makeRequest req = do
+  App {..} <- ask
+  liftIO $ do
+    putStrLn $ tshow req
+    resp <- Client.httpLbs req appManager
+    putStrLn $ tshow resp
+    either (\ msg -> fail $ "Couldn't decode " <> show resp <> " due to " <> msg) pure $
+      eitherDecodeStrict' (toStrict $ Client.responseBody resp)
 
 parseArgs :: IO Opts
 parseArgs =
@@ -59,9 +75,8 @@ main = do
   Opts {..} <- parseArgs
   req <- Client.parseRequest oauthUrl
   rng <- Crypto.cprgCreate <$> Crypto.createEntropyPool
-  rngMv <- newMVar rng
   manager <- Client.newManager Client.defaultManagerSettings
   let cred = OAuth.clientCred $ OAuth.Token oauthKey oauthSecret
-      app = App rngMv manager OAuth.defaultServer cred
-  _ :: Value <- makeRequest app =<< signRequest app req
+      app = App manager OAuth.defaultServer cred
+  _ :: Value <- fst <$> evalRWST (makeRequest =<< signRequest req) app rng
   pure ()
