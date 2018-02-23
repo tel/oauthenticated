@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2b92ef5e48fb8555a15a1dbc375ba963131cabd562006cd071b843ae09a5fd59
+-- hash: 7993a4ded63e19a2d5e4f73014128aad19325fe02142bbdcd5c99d49aa783691
 
 name:           oauthenticated
 version:        0.2.0.0
@@ -81,4 +81,38 @@ library
   other-modules:
       Network.OAuth.MuLens
       Network.OAuth.Util
+  default-language: Haskell2010
+
+test-suite spec
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  ghc-options: -Wall -Werror -fwarn-tabs
+  build-depends:
+      aeson
+    , base
+    , base64-bytestring
+    , blaze-builder
+    , bytestring
+    , case-insensitive
+    , crypto-random
+    , cryptohash
+    , exceptions
+    , hspec
+    , hspec-expectations
+    , http-client
+    , http-client-tls
+    , http-types
+    , mtl
+    , network
+    , network-uri
+    , oauthenticated
+    , text
+    , time
+    , transformers
+  other-modules:
+      Config
+      SigningSpec
+      Paths_oauthenticated
   default-language: Haskell2010

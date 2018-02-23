@@ -67,4 +67,15 @@ library:
     - Network.OAuth.MuLens
     - Network.OAuth.Util
 
+tests:
+  spec:
+    main: Spec.hs
+    source-dirs:
+      - test
+    dependencies:
+      - hspec
+      - hspec-expectations
+      - http-client-tls
+      - oauthenticated
+
 github: tel/oauthenticated.git
