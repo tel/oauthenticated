@@ -43,7 +43,7 @@ ghc-options:
   - -fwarn-tabs
 
 dependencies:
-  - base >= 4.10 && < 5
+  - base >= 4.8 && < 5
   - aeson
   - base64-bytestring
   - blaze-builder
