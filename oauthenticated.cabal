@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 7993a4ded63e19a2d5e4f73014128aad19325fe02142bbdcd5c99d49aa783691
+-- hash: 17b79e47a3f7b1729531b411a7a3e56766102b8aeb5e6ba09cdabd55c17d5d88
 
 name:           oauthenticated
 version:        0.2.0.0
@@ -52,10 +52,10 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -Wall -Werror -fwarn-tabs
+  ghc-options: -Wall -fwarn-tabs
   build-depends:
       aeson
-    , base
+    , base >=4.10 && <5
     , base64-bytestring
     , blaze-builder
     , bytestring
@@ -88,10 +88,10 @@ test-suite spec
   main-is: Spec.hs
   hs-source-dirs:
       test
-  ghc-options: -Wall -Werror -fwarn-tabs
+  ghc-options: -Wall -fwarn-tabs
   build-depends:
       aeson
-    , base
+    , base >=4.10 && <5
     , base64-bytestring
     , blaze-builder
     , bytestring

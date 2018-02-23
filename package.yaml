@@ -39,11 +39,11 @@ build-type: Simple
 
 ghc-options:
   - -Wall
-  - -Werror
+  # - -Werror
   - -fwarn-tabs
 
 dependencies:
-  - base
+  - base >= 4.8 && < 5
   - aeson
   - base64-bytestring
   - blaze-builder
