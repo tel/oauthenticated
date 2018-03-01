@@ -19,6 +19,7 @@
 
 module Network.OAuth.Types.Params where
 
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Crypto.Random
 import qualified Data.ByteString                 as S
 import qualified Data.ByteString.Base64          as S64
@@ -177,12 +178,11 @@ emptyPin = OaPin { timestamp = Timestamp (UTCTime (ModifiedJulianDay 0) 0)
 
 -- | Creates a new, unique, unpredictable 'OaPin'. This should be used quickly
 -- as dependent on the OAuth server settings it may expire.
-freshPin :: CPRG gen => gen -> IO (OaPin, gen)
-freshPin gen = do
-  t <- Timestamp <$> getCurrentTime
-  return (OaPin { timestamp = t, nonce = n }, gen')
-  where
-    (n, gen') = withRandomBytes gen 8 S64.encode
+freshPin :: (MonadRandom m, MonadIO m) => m OaPin
+freshPin = do
+  t <- Timestamp <$> liftIO getCurrentTime
+  n <- S64.encode <$> getRandomBytes 8
+  return OaPin { timestamp = t, nonce = n }
 
 -- | Uses 'emptyPin' to create an empty set of params 'Oa'.
 emptyOa :: Cred ty -> Oa ty
@@ -190,10 +190,10 @@ emptyOa creds =
   Oa { credentials = creds, workflow = Standard, pin = emptyPin }
 
 -- | Uses 'freshPin' to create a fresh, default set of params 'Oa'.
-freshOa :: CPRG gen => Cred ty -> gen -> IO (Oa ty, gen)
-freshOa creds gen = do
-  (pinx, gen') <- freshPin gen
-  return (Oa { credentials = creds, workflow = Standard, pin = pinx }, gen')
+freshOa :: (MonadRandom m, MonadIO m) => Cred ty -> m (Oa ty)
+freshOa creds = do
+  pinx <- freshPin
+  return Oa { credentials = creds, workflow = Standard, pin = pinx }
 
 -- | The 'Oa' parameters include all the OAuth information specific to a single
 -- request. They are not sufficient information by themselves to generate the

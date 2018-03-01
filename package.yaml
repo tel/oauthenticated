@@ -39,7 +39,7 @@ build-type: Simple
 
 ghc-options:
   - -Wall
-  # - -Werror
+  - -Werror
   - -fwarn-tabs
 
 dependencies:
@@ -49,11 +49,11 @@ dependencies:
   - blaze-builder
   - bytestring
   - case-insensitive
-  - crypto-random
-  - cryptohash
+  - cryptonite
   - exceptions
   - http-client
   - http-types
+  - memory
   - mtl
   - time
   - text
