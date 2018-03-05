@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 17b79e47a3f7b1729531b411a7a3e56766102b8aeb5e6ba09cdabd55c17d5d88
+-- hash: 57f362363e0372f8ed826839dd46a943056dacf5c94980d89d3443c4de1a4ab4
 
 name:           oauthenticated
-version:        0.2.0.0
+version:        0.2.1.0
 synopsis:       Simple OAuth for http-client
 description:    /Warning/: This software is pre 1.0 and thus its API may change very
                 dynamically while updating only minor versions. This package will follow the
@@ -52,19 +52,19 @@ source-repository head
 library
   hs-source-dirs:
       src
-  ghc-options: -Wall -fwarn-tabs
+  ghc-options: -Wall -Werror -fwarn-tabs
   build-depends:
       aeson
-    , base >=4.10 && <5
+    , base >=4.8 && <5
     , base64-bytestring
     , blaze-builder
     , bytestring
     , case-insensitive
-    , crypto-random
-    , cryptohash
+    , cryptonite
     , exceptions
     , http-client
     , http-types
+    , memory
     , mtl
     , network
     , network-uri
@@ -88,22 +88,22 @@ test-suite spec
   main-is: Spec.hs
   hs-source-dirs:
       test
-  ghc-options: -Wall -fwarn-tabs
+  ghc-options: -Wall -Werror -fwarn-tabs
   build-depends:
       aeson
-    , base >=4.10 && <5
+    , base >=4.8 && <5
     , base64-bytestring
     , blaze-builder
     , bytestring
     , case-insensitive
-    , crypto-random
-    , cryptohash
+    , cryptonite
     , exceptions
     , hspec
     , hspec-expectations
     , http-client
     , http-client-tls
     , http-types
+    , memory
     , mtl
     , network
     , network-uri

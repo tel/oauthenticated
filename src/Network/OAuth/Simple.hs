@@ -61,9 +61,7 @@ module Network.OAuth.Simple (
 
 import qualified Control.Monad.Catch             as E
 import           Control.Monad.Reader
-import           Control.Monad.State
 import           Control.Monad.Trans.Except
-import qualified Crypto.Random                   as R
 import qualified Data.ByteString.Lazy            as SL
 import qualified Network.HTTP.Client             as C
 import qualified Network.OAuth                   as O
@@ -80,15 +78,14 @@ data OaConfig ty =
 -- | Perform authenticated requests using a shared 'C.Manager' and
 -- a particular set of 'O.Cred's.
 newtype OAuthT ty m a =
-  OAuthT { unOAuthT :: ReaderT (OaConfig ty) (StateT R.SystemRNG m) a }
+  OAuthT { unOAuthT :: ReaderT (OaConfig ty) m a }
   deriving ( Functor, Applicative, Monad
            , MonadReader (OaConfig ty)
-           , MonadState R.SystemRNG
            , E.MonadCatch
            , E.MonadThrow
            , MonadIO
            )
-instance MonadTrans (OAuthT ty) where lift = OAuthT . lift . lift
+instance MonadTrans (OAuthT ty) where lift = OAuthT . lift
 
 -- | 'OAuthT' wrapped over 'IO'.
 type OAuth ty = OAuthT ty IO
@@ -99,8 +96,7 @@ runOAuthT
      OAuthT ty m a -> O.Cred ty -> O.Server -> O.ThreeLegged ->
      m a
 runOAuthT oat cr srv tl = do
-  entropy <- liftIO R.createEntropyPool
-  evalStateT (runReaderT (unOAuthT oat) (OaConfig cr srv tl)) (R.cprgCreate entropy)
+  runReaderT (unOAuthT oat) (OaConfig cr srv tl)
 
 runOAuth :: OAuth ty a -> O.Cred ty -> O.Server -> O.ThreeLegged -> IO a
 runOAuth = runOAuthT
@@ -122,22 +118,18 @@ upgradeCred tok = liftM (Cred.upgradeCred tok . cred) ask
 -- with the same configuration but new credentials.
 upgrade :: (Cred.ResourceToken ty', Monad m) => O.Token ty' -> OAuthT ty' m a -> OAuthT ty m a
 upgrade tok oat = do
-  gen  <- state R.cprgFork
   conf <- ask
   let conf' = conf { cred = Cred.upgradeCred tok (cred conf) }
-  lift $ evalStateT (runReaderT (unOAuthT oat) conf') gen
+  lift $ runReaderT (unOAuthT oat) conf'
 
-liftBasic :: MonadIO m => (R.SystemRNG -> OaConfig ty -> IO (a, R.SystemRNG)) -> OAuthT ty m a
+liftBasic :: MonadIO m => (OaConfig ty -> IO a) -> OAuthT ty m a
 liftBasic f = do
-  gen  <- get
   conf <- ask
-  (a, gen') <- liftIO (f gen conf)
-  put gen'
-  return a
+  liftIO $ f conf
 
 -- | Sign a request using fresh credentials.
 oauth :: MonadIO m => C.Request -> OAuthT ty m C.Request
-oauth req = liftBasic $ \gen conf -> O.oauth (cred conf) (server conf) req gen
+oauth req = liftBasic $ \conf -> O.oauth (cred conf) (server conf) req
 
 -- Three-Legged Authorization
 --------------------------------------------------------------------------------
@@ -146,12 +138,11 @@ requestTemporaryToken
   :: MonadIO m => C.Manager ->
      OAuthT O.Client m (C.Response (Either SL.ByteString (O.Token O.Temporary)))
 requestTemporaryToken man =
-  liftBasic $ \gen conf ->
+  liftBasic $ \conf ->
     O.requestTemporaryToken (cred conf)
                             (server conf)
                             (threeLegged conf)
                             man
-                            gen
 
 buildAuthorizationUrl :: Monad m => OAuthT O.Temporary m URI
 buildAuthorizationUrl = do
@@ -162,13 +153,12 @@ requestPermanentToken
   :: MonadIO m => C.Manager -> O.Verifier ->
      OAuthT O.Temporary m (C.Response (Either SL.ByteString (O.Token O.Permanent)))
 requestPermanentToken man ver =
-  liftBasic $ \gen conf ->
+  liftBasic $ \conf ->
     O.requestPermanentToken (cred conf)
                             (server conf)
                             ver
                             (threeLegged conf)
                             man
-                            gen
 
 data TokenRequestFailure =
     OnTemporaryRequest C.HttpException

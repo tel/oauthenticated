@@ -1,5 +1,5 @@
 name: oauthenticated
-version: 0.2.0.0
+version: 0.2.1.0
 synopsis: Simple OAuth for http-client
 description: |
   /Warning/: This software is pre 1.0 and thus its API may change very
@@ -39,7 +39,7 @@ build-type: Simple
 
 ghc-options:
   - -Wall
-  # - -Werror
+  - -Werror
   - -fwarn-tabs
 
 dependencies:
@@ -49,11 +49,11 @@ dependencies:
   - blaze-builder
   - bytestring
   - case-insensitive
-  - crypto-random
-  - cryptohash
+  - cryptonite
   - exceptions
   - http-client
   - http-types
+  - memory
   - mtl
   - time
   - text
