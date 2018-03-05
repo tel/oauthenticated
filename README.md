@@ -24,3 +24,8 @@
   See the `examples` directory for a script making a OAuth call to a URL
   with default parameters. Run `stack examples/oauth-authenticate.hs
   --help` for usage.
+
+## Three-legged Protocol
+
+  Warning: the implementation in ThreeLegged.hs has not been tested since recent
+  refactoring and may or may not do anything useful.
