@@ -3,7 +3,8 @@
 module SigningSpec where
 
 import Control.Monad
-import Network.HTTP.Client (httpLbs, parseRequest, responseStatus)
+import Data.List (nub)
+import Network.HTTP.Client (httpLbs, parseRequest, requestHeaders, responseStatus)
 import Network.HTTP.Types (status200)
 import Network.OAuth (oauth)
 import Test.Hspec (Spec, describe, example, it)
@@ -28,3 +29,9 @@ spec Config {..} = describe "signing" $ do
                         ) [] (replicate 100 req)
     forM_ resps $ \ resp ->
       example $ responseStatus resp `shouldBe` status200
+
+  it "generates a unique nonce for each repeated request" $ do
+    req <- parseRequest url
+    headers <- replicateM 100 (requestHeaders <$> oauth cred ser req)
+    let uniqueHeaders = nub headers
+    length headers `shouldBe` length uniqueHeaders
