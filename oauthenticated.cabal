@@ -2,10 +2,10 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 655614165ca559bb85ecc1850b8c1f90ec9de4ab3491d277b259a302a2790ab3
+-- hash: 57f362363e0372f8ed826839dd46a943056dacf5c94980d89d3443c4de1a4ab4
 
 name:           oauthenticated
-version:        0.2.0.0
+version:        0.2.1.0
 synopsis:       Simple OAuth for http-client
 description:    /Warning/: This software is pre 1.0 and thus its API may change very
                 dynamically while updating only minor versions. This package will follow the
