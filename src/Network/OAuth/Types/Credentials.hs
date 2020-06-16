@@ -49,7 +49,6 @@ import           Control.Monad
 import           Data.Aeson
 import qualified Data.ByteString      as S
 import           Data.Data
-import           Data.Monoid
 import           Network.HTTP.Types   (parseQuery, urlEncode)
 import           Network.OAuth.Util
 import           Data.Text.Encoding (decodeLatin1, encodeUtf8)
