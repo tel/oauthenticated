@@ -57,12 +57,14 @@ data ParameterMethod = AuthorizationHeader
 -- Several methods exist for generating these signatures, the most
 -- popular being 'HmacSha1'.
 data SignatureMethod = HmacSha1
+                     | HmacSha256
                      | Plaintext
                      deriving ( Show, Eq, Ord, Data, Typeable )
 
 instance H.QueryValueLike SignatureMethod where
-  toQueryValue HmacSha1  = Just "HMAC-SHA1"
-  toQueryValue Plaintext = Just "PLAINTEXT"
+  toQueryValue HmacSha1    = Just "HMAC-SHA1"
+  toQueryValue HmacSha256  = Just "HMAC-SHA256"
+  toQueryValue Plaintext   = Just "PLAINTEXT"
 
 -- | OAuth has progressed through several versions since its inception. In
 -- particular, there are two community editions \"OAuth Core 1.0\" (2007)

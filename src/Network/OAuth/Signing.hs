@@ -37,7 +37,7 @@ module Network.OAuth.Signing (
 
 import qualified Blaze.ByteString.Builder        as Blz
 import           Control.Monad.IO.Class          (MonadIO)
-import           Crypto.Hash                     (SHA1)
+import           Crypto.Hash                     (SHA1, SHA256)
 import           Crypto.Random                   (MonadRandom)
 import           Crypto.MAC.HMAC                 (HMAC, hmac)
 import           Data.ByteArray                  (convert)
@@ -74,8 +74,9 @@ sign oax server req =
   in augmentRequest (parameterMethod server) params req
 
 makeSignature :: SignatureMethod -> S.ByteString -> S.ByteString -> S.ByteString
-makeSignature HmacSha1  sigKey payload = S64.encode $ convert (hmac sigKey payload :: HMAC SHA1)
-makeSignature Plaintext sigKey _       = sigKey
+makeSignature HmacSha1    sigKey payload = S64.encode $ convert (hmac sigKey payload :: HMAC SHA1)
+makeSignature HmacSha256  sigKey payload = S64.encode $ convert (hmac sigKey payload :: HMAC SHA256)
+makeSignature Plaintext   sigKey _       = sigKey
 
 -- | Augments whatever component of the 'C.Request' is specified by
 -- 'ParameterMethod' with one built from the apropriate OAuth parameters
