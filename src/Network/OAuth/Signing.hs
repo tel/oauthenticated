@@ -48,7 +48,6 @@ import qualified Data.ByteString.Lazy            as SL
 import           Data.Char                       (toUpper)
 import           Data.List                       (sort)
 import           Data.Maybe                      (fromMaybe, mapMaybe)
-import           Data.Monoid
 import qualified Network.HTTP.Client             as C
 import qualified Network.HTTP.Types              as H
 import qualified Network.HTTP.Types.QueryLike    as H
